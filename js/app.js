@@ -53,22 +53,23 @@ function navigateTo(id) {
 function loadDash() {
   $('greet').textContent = salam() + (USER ? ', ' + String(USER.nama).split(' ')[0] : '') + ' 👋';
   if (!$('dashDate').value) $('dashDate').value = new Date().toLocaleDateString('sv-SE');
+  setDateText();
   api('getDashboardData', [$('dashDate').value], r => {
     if (!r.success) return toast(r.message, 'danger');
     const x = r.data;
-    const k = [['Total Siswa', x.total, '#3b82f6', 'people'], ['Hadir', x.hadir, '#10b981', 'check-circle'], ['Terlambat', x.terlambat, '#f59e0b', 'clock'],
-               ['Izin/Sakit', x.izin, '#06b6d4', 'bandaid'], ['Alpa', x.alpa, '#ef4444', 'x-circle'], ['Belum Absen', x.belum, '#94a3b8', 'hourglass-split']];
-    $('kpi').innerHTML = k.map(([l, v, c, i]) => `<div class="col-6 col-md-4 col-xl-2"><div class="stat-card"><span class="ico" style="color:${c}"><i class="bi bi-${i}"></i></span><div class="l">${l}</div><div class="v">${v}</div></div></div>`).join('');
+    const t = x.total || 1;
+    const k = [['Total Siswa', x.total, 'people', null], ['Hadir', x.hadir, 'check2-circle', x.hadir / t], ['Terlambat', x.terlambat, 'clock', x.terlambat / t],
+               ['Izin/Sakit', x.izin, 'bandaid', x.izin / t], ['Alpa', x.alpa, 'x-circle', x.alpa / t], ['Belum Absen', x.belum, 'hourglass-split', x.belum / t]];
+    $('kpi').innerHTML = k.map(([l, v, i, p]) => `<div class="kpi"><span class="kico"><i class="bi bi-${i}"></i></span><div class="flex-grow-1"><div class="kl">${l}</div><div class="kv">${v}${p !== null ? `<small>/${x.total}</small>` : ''}</div>${p !== null ? `<div class="bar"><i style="width:${Math.round(p * 100)}%"></i></div>` : ''}</div></div>`).join('');
+    $('matrix').innerHTML = [['Tepat Waktu', x.hadir - x.terlambat, 'm1'], ['Terlambat', x.terlambat, 'm2'], ['Izin / Sakit', x.izin, 'm3'], ['Alpa', x.alpa, 'm4']].map(([l, v, c]) => `<div class="mx ${c}"><b>${v}</b><span>${l}</span></div>`).join('');
     $('insights').innerHTML = x.insights.map(i => `<li>${esc(i)}</li>`).join('');
     if (chart) chart.destroy();
     chart = new Chart($('chartStatus'), { type: 'doughnut',
       data: { labels: ['Tepat Waktu', 'Terlambat', 'Izin/Sakit', 'Alpa', 'Belum Absen'],
-        datasets: [{ data: [x.hadir - x.terlambat, x.terlambat, x.izin, x.alpa, x.belum], backgroundColor: ['#10b981', '#f59e0b', '#06b6d4', '#ef4444', '#94a3b8'], borderWidth: 0 }] },
+        datasets: [{ data: [x.hadir - x.terlambat, x.terlambat, x.izin, x.alpa, x.belum], backgroundColor: ['#123a78', '#3f6cb3', '#7fa1d3', '#b7cbe8', '#e1e9f5'], borderWidth: 0 }] },
       options: { plugins: { legend: { position: 'bottom', labels: { color: getComputedStyle(document.body).color } } } } });
-    $('recent').innerHTML = x.recent.length ? x.recent.map(r => `<tr><td>${esc(r.waktu)}</td><td><b>${esc(r.nama)}</b></td><td>${esc(r.kelas)}</td>
-      <td><span class="badge text-bg-${r.jenis === 'Pulang' ? 'warning' : 'primary'}">${esc(r.jenis)}</span></td>
-      <td><span class="badge text-bg-${badge(r.status)}">${esc(r.status)}</span></td></tr>`).join('')
-      : '<tr><td colspan="5" class="text-center text-muted">Belum ada absen pada tanggal ini.</td></tr>';
+    $('recent').innerHTML = x.recent.length ? x.recent.map(r => `<div class="tl-item"><time>${esc(String(r.waktu).slice(0, 5))}</time><span class="dot"></span><div class="tl-pill"><b>${esc(r.nama)}</b><small>${esc(r.kelas)} · ${esc(r.jenis)}</small><span class="badge text-bg-${badge(r.status)}">${esc(r.status)}</span></div></div>`).join('')
+      : '<p class="text-muted small">Belum ada absen pada tanggal ini.</p>';
   });
 }
 
@@ -304,6 +305,11 @@ function start() {
 
 // ===== TAMPILAN =====
 let SJK = '';
+function setDateText() {
+  const d = new Date($('dashDate').value + 'T00:00:00');
+  $('dateText').textContent = d.toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' }).toUpperCase();
+  $('dayText').textContent = d.toLocaleDateString('id-ID', { weekday: 'long' }).toUpperCase();
+}
 function salam() { const h = new Date().getHours(); return h < 11 ? 'Selamat Pagi' : h < 15 ? 'Selamat Siang' : h < 18 ? 'Selamat Sore' : 'Selamat Malam'; }
 function filterSiswa() {
   const q = ($('gSearch').value || '').toLowerCase();
@@ -339,6 +345,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   };
   document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => { navigateTo(b.dataset.go); if (b.dataset.then) $(b.dataset.then).click(); });
+  const openDate = () => { try { $('dashDate').showPicker(); } catch (e) { $('dashDate').focus(); } };
+  $('dateBadge').onclick = openDate; $('dateBadge').onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDate(); } };
   $('btnTheme').onclick = () => $('themeSwitch').click();
   $('jkTabs').onclick = e => { const b = e.target.closest('button'); if (!b) return; SJK = b.dataset.jk; document.querySelectorAll('#jkTabs .pill-tab').forEach(x => x.classList.toggle('active', x === b)); filterSiswa(); };
   $('gSearch').oninput = () => { if (!$('section-siswa').classList.contains('active')) navigateTo('siswa'); filterSiswa(); };

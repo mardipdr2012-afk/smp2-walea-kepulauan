@@ -39,32 +39,38 @@
 
     <!-- DASHBOARD -->
     <section id="section-dashboard" class="content-section active">
-      <div class="hero">
-        <div class="hero-text">
-          <h2 class="fw-bold mb-1" id="greet">Selamat Datang 👋</h2>
-          <p class="text-muted mb-2">Ringkasan kehadiran siswa SMP Negeri 2 Walea Kepulauan pada tanggal:</p>
-          <input type="date" id="dashDate" class="form-control w-auto mb-3">
+      <header class="plan-head">
+        <div>
+          <h1 class="plan-title"><span class="big">ABSEN</span><span class="sub">SISWA<br>SMPN 2 WALEA KEPULAUAN</span></h1>
+          <p class="text-muted mb-0"><span id="greet" class="fw-semibold"></span> · Hadir tepat waktu, belajar dengan tekun.</p>
         </div>
-        <img class="hero-img" src="https://res.cloudinary.com/twobznku/image/upload/f_auto/q_auto/logo_ddyozf.png" alt="">
-        <div class="row g-3" id="kpi"></div>
-      </div>
-      <div class="row g-3">
-        <div class="col-lg-8">
-          <div class="card mb-3"><div class="card-header fw-semibold">Riwayat Scan Terakhir</div>
-            <div class="table-responsive"><table class="table mb-0">
-              <thead><tr><th>Waktu</th><th>Nama</th><th>Kelas</th><th>Jenis</th><th>Status</th></tr></thead>
-              <tbody id="recent"></tbody></table></div></div>
-          <div class="card p-3"><h6 class="fw-bold">Komposisi Kehadiran</h6><canvas id="chartStatus" height="200"></canvas></div>
+        <div class="date-badge" id="dateBadge" role="button" tabindex="0" aria-label="Pilih tanggal">
+          <i class="bi bi-calendar3"></i><span><b id="dateText"></b><em id="dayText"></em></span>
+          <input type="date" id="dashDate" tabindex="-1">
         </div>
+      </header>
+      <div class="kpi-strip" id="kpi"></div>
+      <div class="row g-4">
         <div class="col-lg-4">
-          <div class="card p-3 mb-3"><h6 class="fw-bold mb-2">Aksi Cepat</h6>
-            <a class="qa" data-go="scan"><span class="ico"><i class="bi bi-qr-code-scan"></i></span><span><b>Scan Absen</b><small>Catat kehadiran dengan QR</small></span><i class="bi bi-chevron-right ms-auto"></i></a>
-            <a class="qa" data-go="siswa" data-then="btnTambah"><span class="ico"><i class="bi bi-person-plus"></i></span><span><b>Tambah Siswa</b><small>Daftarkan siswa baru</small></span><i class="bi bi-chevron-right ms-auto"></i></a>
-            <a class="qa" data-go="rekap"><span class="ico"><i class="bi bi-table"></i></span><span><b>Rekap Presensi</b><small>Lihat dan cetak rekap</small></span><i class="bi bi-chevron-right ms-auto"></i></a>
-            <a class="qa" data-go="peringkat"><span class="ico"><i class="bi bi-trophy"></i></span><span><b>Peringkat</b><small>Prestasi dan pelanggaran</small></span><i class="bi bi-chevron-right ms-auto"></i></a>
-          </div>
-          <div class="insight-card"><h6><i class="bi bi-lightbulb"></i> Analisis Otomatis</h6><ul id="insights" class="mb-0 ps-3"></ul></div>
+          <h2 class="sec-title">Ringkasan Status</h2><div class="matrix" id="matrix"></div>
+          <h2 class="sec-title mt-4">Aksi Cepat</h2>
+          <a class="goal" data-go="scan"><em>01</em><span><b>Scan Absen</b><small>Catat kehadiran dengan QR</small></span></a>
+          <a class="goal" data-go="siswa" data-then="btnTambah"><em>02</em><span><b>Tambah Siswa</b><small>Daftarkan siswa baru</small></span></a>
+          <a class="goal" data-go="rekap"><em>03</em><span><b>Rekap Presensi</b><small>Lihat dan cetak rekap</small></span></a>
+          <a class="goal" data-go="peringkat"><em>04</em><span><b>Peringkat</b><small>Prestasi dan pelanggaran</small></span></a>
         </div>
+        <div class="col-lg-4"><h2 class="sec-title">Riwayat Scan</h2><div class="timeline" id="recent"></div></div>
+        <div class="col-lg-4">
+          <h2 class="sec-title">Analisis Otomatis</h2><div class="note-card"><ul id="insights"></ul></div>
+          <h2 class="sec-title mt-4">Komposisi Kehadiran</h2><div class="card-flat"><canvas id="chartStatus" height="230"></canvas></div>
+        </div>
+      </div>
+      <div class="reminder">
+        <div class="rm-brand"><i class="bi bi-flower1"></i><b>PENGINGAT<br>HARIAN</b></div>
+        <div><b>TEPAT WAKTU</b><small>Absen masuk sebelum batas jam.</small></div>
+        <div><b>TETAP FOKUS</b><small>Simpan ponsel saat pelajaran.</small></div>
+        <div><b>KONSISTEN</b><small>Kehadiran rutin membangun prestasi.</small></div>
+        <div><b>POSITIF</b><small>Setiap hari adalah kesempatan baru.</small></div>
       </div>
     </section>
 
