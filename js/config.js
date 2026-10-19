@@ -1,5 +1,5 @@
 // Tempel URL Web App Apps Script (berakhiran /exec) di antara tanda kutip
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbzcpPQ4hciaytSDSp1or-O1NJJ_6NPIZ6egcsx3k97UOOqWAkqORwVC_H9ijOoZ77-jlg/exec';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbwch3KQr-NafBuRfCOVmoBQunKkzK1R47QiS6uFutlG-YlKWdvC8NTMR7e_nPzhgd968Q/exec';
 
 // Identitas sekolah untuk Kartu Pelajar (ubah sesuai kebutuhan; alamat boleh dikosongkan)
 const SEKOLAH = {
