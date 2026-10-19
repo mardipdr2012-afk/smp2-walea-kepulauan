@@ -3,4 +3,4 @@
 // ============================================
 // Isi dengan URL Web App Apps Script (berakhiran /exec).
 // Contoh: 'https://script.google.com/macros/s/AKfycb.../exec'
-const GAS_URL = 'GANTI_DENGAN_URL_EXEC_ANDA';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbzcpPQ4hciaytSDSp1or-O1NJJ_6NPIZ6egcsx3k97UOOqWAkqORwVC_H9ijOoZ77-jlg/exec';
