@@ -142,21 +142,26 @@
     </section>
 
     <!-- REKAP -->
-    <section id="section-rekap" class="content-section">
-      <div class="d-flex justify-content-between flex-wrap gap-2 mb-3 no-print">
-        <div><h3 class="fw-bold mb-0">Rekap Presensi</h3><small class="text-muted">Data absensi yang telah masuk</small></div>
-        <div class="d-flex gap-2 flex-wrap align-items-center">
-          <select id="fJenis" class="form-select w-auto"><option value="Sekolah">Absen Sekolah</option><option value="Mata Pelajaran">Mata Pelajaran</option></select>
-          <select id="fKelas" class="form-select w-auto"><option value="Semua">Semua Kelas</option></select>
-          <select id="fTgl" class="form-select w-auto"></select>
-          <select id="fBln" class="form-select w-auto"></select>
-          <select id="fThn" class="form-select w-auto"></select>
-          <button class="btn btn-primary" id="btnRekap"><i class="bi bi-arrow-repeat"></i> Tampilkan</button>
-          <button class="btn btn-success" onclick="cetak('rekap')"><i class="bi bi-printer"></i> Cetak PDF</button>
+    <section id="section-rekap" class="content-section sis-scope">
+      <div class="sis-card">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+          <div><div class="sis-title">Rekapitulasi Presensi Siswa</div><div class="sis-sub">Laporan kehadiran, keterlambatan, dan persentase kehadiran bulanan</div></div>
+          <div class="d-flex gap-2 flex-wrap">
+            <button class="btn btn-soft" id="btnCetakHasil"><i class="bi bi-printer"></i> Cetak Hasil</button>
+            <button class="btn btn-sky" id="btnCetakLengkap"><i class="bi bi-printer-fill"></i> Cetak Lengkap</button>
+          </div>
         </div>
+        <div class="row g-3 mt-1">
+          <div class="col-12 col-md-3"><label class="form-label" for="rBulan">Bulan</label><input type="month" id="rBulan" class="form-control"></div>
+          <div class="col-12 col-md-3"><label class="form-label" for="fKelas">Kelas</label><select id="fKelas" class="form-select"><option value="Semua">Semua Kelas</option></select></div>
+          <div class="col-12 col-md-6"><label class="form-label" for="rSearch">Cari nama / NIS</label><input id="rSearch" class="form-control" placeholder="Cari nama atau NIS siswa..." autocomplete="off"></div>
+        </div>
+        <div class="d-flex gap-2 flex-wrap mt-3" id="rJenisTabs"><button class="pill-tab active" data-j="Sekolah">Presensi Sekolah</button><button class="pill-tab" data-j="Mata Pelajaran">Mata Pelajaran</button></div>
       </div>
-      <div class="card"><div class="table-responsive"><table class="table mb-0">
-        <thead id="rekapHead"></thead><tbody id="rekapBody"></tbody></table></div></div>
+      <div class="sis-card">
+        <div class="sis-sub mb-3" id="rInfo"></div>
+        <div class="table-responsive"><table class="table sis-table rk-table mb-0"><thead id="rekapHead"></thead><tbody id="rekapBody"></tbody></table></div>
+      </div>
     </section>
   </main>
 
@@ -213,6 +218,19 @@
     <div class="modal-header"><h5 class="modal-title fw-bold">Cetak Kartu Per Kelas</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button></div>
     <div class="modal-body"><label class="form-label" for="cKelas">Pilih Kelas</label><select id="cKelas" class="form-select"></select><small class="text-muted d-block mt-2" id="cInfo"></small></div>
     <div class="modal-footer"><button type="button" class="btn btn-soft" data-bs-dismiss="modal">Batal</button><button type="button" class="btn btn-sky" id="btnCetakGo"><i class="bi bi-printer-fill"></i> Cetak</button></div>
+  </div></div></div>
+
+  <!-- Modal Pratinjau Cetak -->
+  <div class="modal fade" id="mdlPreview" tabindex="-1"><div class="modal-dialog modal-xl modal-dialog-scrollable"><div class="modal-content sis-scope">
+    <div class="modal-header flex-wrap gap-2"><div><div class="kartu-title fs-4 text-start"><i class="bi bi-printer"></i> <span id="pvTitle">Pratinjau Cetak</span></div><div class="text-muted small" id="pvSub"></div></div>
+      <div class="d-flex gap-2"><button class="btn btn-sky" id="btnPvCetak"><i class="bi bi-printer-fill"></i> Cetak Sekarang</button><button class="btn btn-soft" data-bs-dismiss="modal">Tutup</button></div></div>
+    <div class="modal-body pv-body"><div class="lap" id="laporan"></div></div>
+  </div></div></div>
+
+  <!-- Modal Detail Jam Presensi -->
+  <div class="modal fade" id="mdlDetail" tabindex="-1"><div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable"><div class="modal-content sis-scope">
+    <div class="modal-header"><div><h5 class="modal-title fw-bold" id="detNama"></h5><div class="small text-muted" id="detSub"></div></div><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button></div>
+    <div class="modal-body p-0"><div class="table-responsive"><table class="table sis-table mb-0" style="min-width:600px"><thead><tr><th>Tanggal</th><th>Status</th><th>Jam Datang</th><th>Jam Pulang</th><th>Terlambat</th><th>Keterangan</th></tr></thead><tbody id="detBody"></tbody></table></div></div>
   </div></div></div>
 
   <!-- Modal Konfirmasi Hapus -->

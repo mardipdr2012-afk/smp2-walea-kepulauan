@@ -90,7 +90,9 @@ function loadSiswa(cb) {
     const opt = '<option value="Semua">Semua Kelas</option>' + kls.map(k => `<option>${esc(k)}</option>`).join('');
     ['fKelas', 'sKelas'].forEach(id => { const cur = $(id).value; $(id).innerHTML = opt; if ([...$(id).options].some(o => o.value === cur)) $(id).value = cur; });
     $('dlKelas').innerHTML = kls.map(k => `<option value="${esc(k)}">`).join('');
-    renderSiswa(); muatFoto(siswa.map(s => s.nis)); cb && cb();
+    renderSiswa(); muatFoto(siswa.map(s => s.nis));
+    if ($('section-rekap').classList.contains('active') && rk.rows.length) { hitungRekap(); renderRekap(); }
+    cb && cb();
   });
 }
 function renderSiswa() {
@@ -316,36 +318,150 @@ $('btnManual').onclick = () => {
   });
 };
 
-// ===== REKAP =====
-function initFilter() {
-  $('fTgl').innerHTML = '<option value="Semua">Semua Tanggal</option>' + Array.from({ length: 31 }, (_, i) => { const v = String(i + 1).padStart(2, '0'); return `<option value="${v}">${v}</option>`; }).join('');
-  $('fBln').innerHTML = '<option value="Semua">Semua Bulan</option>' + BLN.map((b, i) => `<option value="${String(i + 1).padStart(2, '0')}">${b}</option>`).join('');
-  const y = new Date().getFullYear();
-  $('fThn').innerHTML = '<option value="Semua">Semua Tahun</option>' + [y - 2, y - 1, y, y + 1].map(v => `<option>${v}</option>`).join('');
-}
+// ===== REKAP PRESENSI (bulanan) =====
+const HARI_ID = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+let rk = { bln: '', thn: '', rows: [], batas: { biasa: 0, jumat: 0 }, jenis: 'Sekolah', agg: [], efektif: 0 };
+const mntOf = t => { const p = String(t).split(':'); return (+p[0]) * 60 + (+p[1] || 0); };
+const hhmmOf = m => { const t = Math.round(m); return String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0'); };
+const hariTgl = d => { const dt = new Date(+rk.thn, +rk.bln - 1, +d); return HARI_ID[dt.getDay()] + ', ' + (+d) + ' ' + BLN[+rk.bln - 1] + ' ' + rk.thn; };
+const periodeTeks = () => BLN[+rk.bln - 1] + ' ' + rk.thn;
+const ketHari = h => { const st = String(h.status).toLowerCase(); return (st === 'hadir' || st === 'terlambat') ? (h.pen ? 'Dipindai: ' + h.pen : '-') : (h.ket || '-') + (h.pen ? ' (Dicatat: ' + h.pen + ')' : ''); };
+const judulKapital = t => String(t).split(' ').map(w => w.length <= 3 ? w : w[0] + w.slice(1).toLowerCase()).join(' ');
+const urutKelas = (a, b) => String(a).localeCompare(String(b), 'id', { numeric: true });
+
 function loadRekap() {
-  const f = { jenis: $('fJenis').value, kelas: $('fKelas').value, tgl: $('fTgl').value, bln: $('fBln').value, thn: $('fThn').value };
-  api('getRekap', [f], r => { if (!r.success) return toast(r.message, 'danger'); renderRekap(r.data, f.jenis === 'Sekolah'); });
+  const v = $('rBulan').value || today().slice(0, 7), [thn, bln] = v.split('-');
+  api('getRekapBulan', [{ bln, thn }], r => {
+    if (!r.success) return toast(r.message, 'danger');
+    rk.bln = bln; rk.thn = thn; rk.rows = r.data.rows; rk.batas = r.data.batas;
+    hitungRekap(); renderRekap();
+  });
 }
-function renderRekap(rows, sekolah) {
-  let out = rows;
-  if (sekolah) { // gabungkan Masuk & Pulang per siswa per hari
-    const m = new Map();
-    rows.forEach(r => {
-      const k = r.tanggal + '_' + r.nis; if (!m.has(k)) m.set(k, { ...r, masuk: '-', pulang: '-' });
-      const g = m.get(k);
-      if (r.jenis === 'Pulang') g.pulang = r.waktu; else { g.masuk = r.waktu; g.status = r.status; if (r.keterangan) g.keterangan = r.keterangan; }
-    });
-    out = [...m.values()];
+function hitungRekap() {
+  const per = {}, hariSet = new Set();
+  const get = (nis, nama, kelas) => per[nis] || (per[nis] = { nis, nama, kelas, hadir: 0, telat: 0, izin: 0, sakit: 0, alpa: 0, dm: [], pm: [], hari: {} });
+  rk.rows.forEach(([d, jam, nis, nama, kelas, status, ket, jenis, pen]) => {
+    if (jenis === 'Mata Pelajaran') return;
+    const p = get(String(nis), nama, kelas), h = p.hari[d] = p.hari[d] || { d: +d, status: '', masuk: '', pulang: '', telatMnt: 0, ket: '', pen: '' };
+    if (jenis === 'Pulang') { h.pulang = String(jam).slice(0, 5); p.pm.push(mntOf(jam)); return; }
+    const st = String(status).toLowerCase(); hariSet.add(d);
+    h.status = status; h.masuk = String(jam).slice(0, 5); h.ket = ket || ''; h.pen = pen || '';
+    if (st === 'hadir') { p.hadir++; p.dm.push(mntOf(jam)); }
+    else if (st === 'terlambat') {
+      p.telat++; p.dm.push(mntOf(jam));
+      const b = new Date(+rk.thn, +rk.bln - 1, +d).getDay() === 5 ? rk.batas.jumat : rk.batas.biasa;
+      h.telatMnt = Math.max(0, mntOf(jam) - b);
+    } else if (st === 'izin') p.izin++; else if (st === 'sakit') p.sakit++; else if (st === 'alpa') p.alpa++;
+  });
+  rk.efektif = hariSet.size;
+  const avg = a => a.length ? hhmmOf(a.reduce((x, y) => x + y, 0) / a.length) : '-';
+  rk.agg = siswa.filter(s => isAktif(s) || per[s.nis]).map(s => {
+    const p = per[s.nis] || get(s.nis, s.nama, s.kelas);
+    return { ...p, nama: s.nama, kelas: s.kelas, nisn: s.nisn, hp: s.hp, days: Object.values(p.hari).sort((a, b) => a.d - b.d),
+      pct: rk.efektif ? Math.round((p.hadir + p.telat) / rk.efektif * 100) : null, avgD: avg(p.dm), avgP: avg(p.pm) };
+  }).sort((a, b) => urutKelas(a.kelas, b.kelas) || String(a.nama).localeCompare(String(b.nama)));
+}
+function rekapTampil() {
+  const k = $('fKelas').value, q = ($('rSearch').value || '').trim().toLowerCase();
+  return rk.agg.filter(a => (k === 'Semua' || a.kelas === k) && (!q || (a.nama + ' ' + a.nis + ' ' + a.nisn).toLowerCase().includes(q)));
+}
+function mapelRows() {
+  const k = $('fKelas').value, q = ($('rSearch').value || '').trim().toLowerCase();
+  return rk.rows.filter(r => r[7] === 'Mata Pelajaran' && (k === 'Semua' || String(r[4]) === k) && (!q || (r[3] + ' ' + r[2]).toLowerCase().includes(q)))
+    .sort((a, b) => (b[0] + b[1]).localeCompare(a[0] + a[1]));
+}
+function renderRekap() {
+  const st = r => `<span class="badge text-bg-${badge(r)}">${esc(r)}</span>`;
+  if (rk.jenis === 'Mata Pelajaran') {
+    const a = mapelRows();
+    $('rInfo').textContent = a.length + ' data presensi mata pelajaran pada ' + periodeTeks();
+    $('rekapHead').innerHTML = '<tr><th>Tanggal</th><th>Waktu</th><th>NIS</th><th>Nama</th><th>Kelas</th><th>Status</th><th>Mapel / Keterangan</th></tr>';
+    $('rekapBody').innerHTML = a.length ? a.map(r => `<tr><td>${esc(r[0] + '/' + rk.bln + '/' + rk.thn)}</td><td>${esc(String(r[1]).slice(0, 5))}</td><td>${esc(r[2])}</td><td><b>${esc(r[3])}</b></td><td><span class="chip">${esc(r[4])}</span></td><td>${st(r[5])}</td><td>${esc(r[6] || '-')}</td></tr>`).join('')
+      : '<tr><td colspan="7" class="text-center text-muted py-4">Belum ada data.</td></tr>';
+    return;
   }
-  $('rekapHead').innerHTML = sekolah
-    ? '<tr><th>Tanggal</th><th>NIS</th><th>Nama</th><th>Kelas</th><th>Jam Masuk</th><th>Jam Pulang</th><th>Status</th><th>Keterangan</th></tr>'
-    : '<tr><th>Tanggal</th><th>Waktu</th><th>NIS</th><th>Nama</th><th>Kelas</th><th>Status</th><th>Mapel / Keterangan</th></tr>';
-  const st = r => `<span class="badge text-bg-${badge(r.status)}">${esc(r.status)}</span>`;
-  $('rekapBody').innerHTML = out.length ? out.map(r => sekolah
-    ? `<tr><td>${esc(r.tanggal)}</td><td>${esc(r.nis)}</td><td><b>${esc(r.nama)}</b></td><td>${esc(r.kelas)}</td><td>${esc(r.masuk)}</td><td>${esc(r.pulang)}</td><td>${st(r)}</td><td>${esc(r.keterangan || '-')}</td></tr>`
-    : `<tr><td>${esc(r.tanggal)}</td><td>${esc(r.waktu)}</td><td>${esc(r.nis)}</td><td><b>${esc(r.nama)}</b></td><td>${esc(r.kelas)}</td><td>${st(r)}</td><td>${esc(r.keterangan || '-')}</td></tr>`).join('')
-    : '<tr><td colspan="8" class="text-center text-muted">Belum ada data absensi.</td></tr>';
+  const a = rekapTampil();
+  $('rInfo').textContent = rk.efektif + ' hari efektif tercatat';
+  $('rekapHead').innerHTML = '<tr><th>Nama Siswa</th><th>Kelas</th><th>Hadir</th><th>Telat</th><th>Izin</th><th>Sakit</th><th>Alpa</th><th>%</th><th>Rata&sup2; Datang</th><th>Rata&sup2; Pulang</th><th>Kirim WA Ortu</th><th>Detail</th></tr>';
+  $('rekapBody').innerHTML = a.length ? a.map(x => `<tr><td><b>${esc(x.nama)}</b><div class="small text-muted">NIS: ${esc(x.nis)} &bull; NISN: ${esc(x.nisn || '-')}</div></td>
+    <td><span class="chip">${esc(x.kelas)}</span></td><td class="rk-h">${x.hadir}</td><td class="rk-t">${x.telat}</td><td>${x.izin}</td><td>${x.sakit}</td><td class="${x.alpa ? 'rk-a' : ''}">${x.alpa}</td>
+    <td><b>${x.pct === null ? '-' : x.pct + '%'}</b></td><td>${x.avgD}</td><td>${x.avgP}</td>
+    <td><button class="btn btn-wa btn-sm" data-act="wa" data-nis="${esc(x.nis)}"><i class="bi bi-whatsapp"></i> Kirim WA</button></td>
+    <td><button class="btn btn-soft btn-sm" data-act="det" data-nis="${esc(x.nis)}"><i class="bi bi-clock-history"></i> Jam</button></td></tr>`).join('')
+    : '<tr><td colspan="12" class="text-center text-muted py-4">Tidak ada data siswa.</td></tr>';
+}
+function kirimWaRekap(a) {
+  if (!a.hp) return toast('No. HP orang tua belum diisi. Ubah di menu Data Siswa.', 'warning');
+  const msg = `Yth. Orang Tua/Wali dari ${a.nama} (Kelas ${a.kelas}),\n\nRekap presensi bulan ${periodeTeks()} (${rk.efektif} hari efektif):\n- Hadir: ${a.hadir}\n- Terlambat: ${a.telat}\n- Izin: ${a.izin}\n- Sakit: ${a.sakit}\n- Alpa: ${a.alpa}\nPersentase kehadiran: ${a.pct === null ? '-' : a.pct + '%'}\n\nTerima kasih.\n${SEKOLAH.nama}`;
+  window.open('https://wa.me/' + waNum(a.hp) + '?text=' + encodeURIComponent(msg), '_blank', 'noopener');
+}
+function bukaDetail(a) {
+  $('detNama').textContent = a.nama;
+  $('detSub').textContent = `NIS ${a.nis} \u2022 Kelas ${a.kelas} \u2022 ${periodeTeks()} \u2022 Hadir ${a.hadir}, Telat ${a.telat}, Izin ${a.izin}, Sakit ${a.sakit}, Alpa ${a.alpa}`;
+  $('detBody').innerHTML = a.days.length ? a.days.map(h => `<tr><td>${esc(hariTgl(h.d))}</td><td>${h.status ? `<span class="badge text-bg-${badge(h.status)}">${esc(h.status)}</span>` : '-'}</td><td>${esc(h.masuk || '-')}</td><td>${esc(h.pulang || '-')}</td><td>${h.telatMnt ? h.telatMnt + ' mnt' : '-'}</td><td>${esc(ketHari(h))}</td></tr>`).join('')
+    : '<tr><td colspan="6" class="text-center text-muted py-4">Belum ada data presensi pada bulan ini.</td></tr>';
+  bootstrap.Modal.getOrCreateInstance($('mdlDetail')).show();
+}
+// -- Dokumen cetak (kop, tabel, tanda tangan)
+function kopHTML() {
+  return `<div class="lap-kop"><img src="${esc(SEKOLAH.logo)}" alt=""><div class="lap-kop-t"><div>${esc(SEKOLAH.pemda)}</div><div>${esc(SEKOLAH.dinas)}</div><div class="lap-sch">${esc(SEKOLAH.nama)}</div>${SEKOLAH.alamat ? `<div class="lap-adr">${esc(SEKOLAH.alamat)}</div>` : ''}</div></div><div class="lap-rule"></div>`;
+}
+function ttdHTML(kelasList) {
+  const tgl = (SEKOLAH.kota ? SEKOLAH.kota + ', ' : '') + new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+  const kepala = `<div class="lap-ttd"><div>Mengetahui,<br>Kepala ${esc(judulKapital(SEKOLAH.nama))}</div><div class="lap-sp"></div>${SEKOLAH.kepala ? `<div class="lap-nm">${esc(SEKOLAH.kepala)}</div>` : '<div class="lap-dots">&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;</div>'}<div>NIP. ${SEKOLAH.nipKepala ? esc(SEKOLAH.nipKepala) : '&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;'}</div></div>`;
+  const wali = kelasList.map(k => `<div class="lap-ttd"><div>${esc(tgl)}<br>Wali Kelas ${esc(k)}</div><div class="lap-sp"></div><div class="lap-dots">&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;</div><div>NIP. &hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;</div></div>`).join('');
+  return `<div class="lap-ttds">${kepala}${wali}</div>`;
+}
+function lapDoc(judul, tabel, kelasList, labelJml, jml) {
+  const k = $('fKelas').value === 'Semua' ? 'Semua Kelas' : $('fKelas').value;
+  return kopHTML() + `<div class="lap-judul">${judul}</div><div class="lap-meta">Periode: <b>${esc(periodeTeks())}</b> | Kelas: <b>${esc(k)}</b> | Hari Efektif: <b>${rk.efektif} Hari</b> | ${labelJml}: <b>${jml}</b></div>` + tabel + ttdHTML(kelasList);
+}
+function tabelHasil(list) {
+  return '<table class="lap-tbl"><thead><tr><th>No</th><th>Nama Siswa</th><th>NIS</th><th>Kelas</th><th>Hadir</th><th>Telat</th><th>Izin</th><th>Sakit</th><th>Alpa</th><th>%</th><th>Rata&sup2; Datang</th><th>Rata&sup2; Pulang</th></tr></thead><tbody>'
+    + list.map((a, i) => `<tr><td class="c">${i + 1}</td><td>${esc(a.nama)}</td><td class="c">${esc(a.nis)}</td><td class="c">${esc(a.kelas)}</td><td class="c">${a.hadir}</td><td class="c">${a.telat}</td><td class="c">${a.izin}</td><td class="c">${a.sakit}</td><td class="c">${a.alpa}</td><td class="c">${a.pct === null ? '-' : a.pct + '%'}</td><td class="c">${a.avgD}</td><td class="c">${a.avgP}</td></tr>`).join('') + '</tbody></table>';
+}
+function tabelLengkap(list) {
+  let h = '<table class="lap-tbl"><thead><tr><th>No</th><th>Hari, Tanggal</th><th>Status</th><th>Jam Datang<br>(WITA)</th><th>Jam Pulang<br>(WITA)</th><th>Terlambat</th><th>Keterangan</th></tr></thead><tbody>';
+  list.forEach(a => {
+    h += `<tr class="lap-grp"><td colspan="7">${esc(a.nama)} &bull; NIS ${esc(a.nis)} &bull; Kelas ${esc(a.kelas)} &bull; Hadir ${a.hadir}, Telat ${a.telat}, Izin ${a.izin}, Sakit ${a.sakit}, Alpa ${a.alpa}</td></tr>`;
+    h += a.days.length ? a.days.map((d, i) => `<tr><td class="c">${i + 1}</td><td>${esc(hariTgl(d.d))}</td><td class="c">${esc(d.status || '-')}</td><td class="c">${esc(d.masuk || '-')}</td><td class="c">${esc(d.pulang || '-')}</td><td class="c">${d.telatMnt ? d.telatMnt + ' mnt' : '-'}</td><td>${esc(ketHari(d))}</td></tr>`).join('')
+      : '<tr><td colspan="7" class="lap-none">Belum ada data presensi pada periode ini.</td></tr>';
+  });
+  return h + '</tbody></table>';
+}
+function tabelMapel(rows) {
+  return '<table class="lap-tbl"><thead><tr><th>No</th><th>Tanggal</th><th>Waktu</th><th>Nama Siswa</th><th>Kelas</th><th>Status</th><th>Mata Pelajaran / Keterangan</th></tr></thead><tbody>'
+    + rows.map((r, i) => `<tr><td class="c">${i + 1}</td><td class="c">${esc(r[0] + '/' + rk.bln + '/' + rk.thn)}</td><td class="c">${esc(String(r[1]).slice(0, 5))}</td><td>${esc(r[3])}</td><td class="c">${esc(r[4])}</td><td class="c">${esc(r[5])}</td><td>${esc(r[6] || '-')}</td></tr>`).join('') + '</tbody></table>';
+}
+function bukaPreview(mode) {
+  const mapel = rk.jenis === 'Mata Pelajaran';
+  if (mapel && mode === 'lengkap') return toast('Cetak Lengkap hanya untuk Presensi Sekolah. Pilih tab Presensi Sekolah.', 'warning');
+  let html, judul, sub;
+  if (mapel) {
+    const rows = mapelRows(); if (!rows.length) return toast('Tidak ada data untuk dicetak.', 'warning');
+    html = lapDoc('LAPORAN PRESENSI MATA PELAJARAN', tabelMapel(rows), [...new Set(rows.map(r => String(r[4])))].sort(urutKelas), 'Jumlah Data', rows.length);
+    judul = 'Pratinjau Cetak Presensi Mata Pelajaran'; sub = 'Klik Cetak Sekarang lalu pilih "Save as PDF".';
+  } else {
+    const list = rekapTampil(); if (!list.length) return toast('Tidak ada data siswa untuk dicetak.', 'warning');
+    const kls = [...new Set(list.map(a => a.kelas))].sort(urutKelas);
+    if (mode === 'lengkap') { html = lapDoc('LAPORAN LENGKAP PRESENSI SISWA (JAM DATANG &amp; PULANG)', tabelLengkap(list), kls, 'Jumlah Siswa', list.length); judul = 'Pratinjau Cetak Lengkap Presensi'; sub = 'Berisi jam datang & pulang setiap hari. Klik Cetak lalu pilih "Save as PDF".'; }
+    else { html = lapDoc('LAPORAN REKAPITULASI PRESENSI SISWA', tabelHasil(list), kls, 'Jumlah Siswa', list.length); judul = 'Pratinjau Cetak Rekap Presensi'; sub = 'Ringkasan kehadiran per siswa. Klik Cetak lalu pilih "Save as PDF".'; }
+  }
+  $('pvTitle').textContent = judul; $('pvSub').textContent = sub; $('laporan').innerHTML = html;
+  bootstrap.Modal.getOrCreateInstance($('mdlPreview')).show();
+}
+function initRekap() {
+  $('rBulan').value = today().slice(0, 7);
+  $('rBulan').onchange = loadRekap; $('fKelas').onchange = renderRekap; $('rSearch').oninput = renderRekap;
+  $('rJenisTabs').onclick = e => { const b = e.target.closest('button'); if (!b) return; rk.jenis = b.dataset.j; document.querySelectorAll('#rJenisTabs .pill-tab').forEach(x => x.classList.toggle('active', x === b)); renderRekap(); };
+  $('btnCetakHasil').onclick = () => bukaPreview('hasil'); $('btnCetakLengkap').onclick = () => bukaPreview('lengkap');
+  $('btnPvCetak').onclick = () => { $('printArea').innerHTML = $('laporan').innerHTML; cetak('laporan'); };
+  $('rekapBody').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    const a = rk.agg.find(x => x.nis === b.dataset.nis); if (!a) return;
+    if (b.dataset.act === 'wa') kirimWaRekap(a);
+    if (b.dataset.act === 'det') bukaDetail(a);
+  });
 }
 
 // ===== MODUL TAMBAHAN =====
@@ -519,8 +635,8 @@ document.addEventListener('DOMContentLoaded', () => {
   setTheme(localStorage.getItem('theme') || 'light');
   $('themeSwitch').onchange = () => setTheme($('themeSwitch').checked ? 'dark' : 'light');
   $('btnMenu').onclick = $('btnMenu2').onclick = () => toggleSidebar();
-  $('dashDate').onchange = loadDash; $('btnRekap').onclick = loadRekap; $('btnLogout').onclick = logout;
-  initFilter(); Object.keys(MOD).forEach(crud);
+  $('dashDate').onchange = loadDash; $('btnLogout').onclick = logout;
+  initRekap(); Object.keys(MOD).forEach(crud);
   rekapCatat('rekapPel', 'Pelanggaran', 'Rekap Pelanggaran'); rekapCatat('rekapPres', 'Prestasi', 'Rekap Prestasi'); mkPeringkat(); mkPengaturan();
   document.querySelector('.main-content').addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
