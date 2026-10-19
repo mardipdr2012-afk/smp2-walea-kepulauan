@@ -6,7 +6,7 @@ const SEKOLAH = {
   pemda:  'PEMERINTAH KABUPATEN TOJO UNA-UNA',
   dinas:  'DINAS PENDIDIKAN DAN KEBUDAYAAN',
   nama:   'SMP NEGERI 2 WALEA KEPULAUAN',
-  alamat: 'Desa Kolami Kec. Wakep Kab. Tojo Una-Una',          // contoh: 'Jl. ..., Desa ..., Kec. ..., Kab. ...'
+  alamat: 'Desa Kolami Kec. Walea Kepulauan Kab. Tojo Una-Una',          // contoh: 'Jl. ..., Desa ..., Kec. ..., Kab. ...'
   kota:   'Kolami, 19 Oktober 2026',          // dipakai pada tanda tangan: 'Kota, 19 Oktober 2026'
   kepala: 'KURNIA, S.Pd',          // nama Kepala Sekolah (beserta gelar)
   nipKepala: '198312252008042005',
