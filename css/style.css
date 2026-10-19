@@ -194,3 +194,13 @@ body { background: var(--bg); color: var(--text); }
   body.print-kelas #printArea { display: grid !important; grid-template-columns: repeat(2, 1fr); gap: 8mm; }
   body.print-kelas .idc { break-inside: avoid; max-width: none; }
 }
+
+/* ===== MODUL PENGATURAN ===== */
+.hari-wrap { display: flex; gap: 10px; flex-wrap: wrap; }
+.hari-chip { display: inline-flex; align-items: center; gap: 8px; padding: .45rem .9rem; border: 1px solid var(--border); border-radius: 12px; background: var(--card); font-size: .88rem; font-weight: 600; cursor: pointer; user-select: none; }
+.hari-chip input { accent-color: var(--primary); width: 16px; height: 16px; margin: 0; }
+.hari-chip:has(input:checked) { background: var(--soft); border-color: var(--primary); color: var(--primary); }
+.libur-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: .7rem .9rem; border: 1px solid var(--border); border-radius: 12px; background: var(--soft); }
+#p_fonnteToken { border-radius: 14px 0 0 14px !important; }
+.btn-eye { border-radius: 0 14px 14px 0 !important; min-width: 48px; }
+#section-pengaturan .sis-card hr { border-color: var(--border); opacity: 1; }

@@ -427,11 +427,74 @@ function loadPeringkat() {
   });
 }
 // -- Pengaturan
+const HARI = [[1, 'Senin'], [2, 'Selasa'], [3, 'Rabu'], [4, 'Kamis'], [5, 'Jumat'], [6, 'Sabtu'], [7, 'Minggu']];
+const PENG_KEYS = ['gerbangBuka', 'terlambat', 'batasMasuk', 'mulaiPulang', 'gerbangBukaJumat', 'terlambatJumat', 'mulaiPulangJumat', 'minHariPeringkat', 'tahunAjaran', 'fonnteToken', 'waOtomatis'];
+const tglPendek = iso => String(iso).split('-').reverse().join('/');
 function mkPengaturan() {
-  mkSection('pengaturan', `<h3 class="fw-bold mb-3">Pengaturan</h3><form id="pengForm" class="card p-3" style="max-width:480px">${[['terlambat','Batas tepat waktu (lewat = Terlambat)'],['batasMasuk','Batas akhir absen masuk'],['mulaiPulang','Mulai absen pulang']].map(([k, l]) => `<label class="form-label">${l}</label><input type="time" name="${k}" class="form-control mb-3" required>`).join('')}<button class="btn btn-primary">Simpan</button></form>`);
+  const jam = (k, l, req) => `<div class="col-12 col-md-6"><label class="form-label" for="p_${k}">${l}</label><input id="p_${k}" name="${k}" type="time" class="form-control" ${req ? 'required' : ''}></div>`;
+  mkSection('pengaturan', `
+    <div class="sis-card">
+      <div class="sis-title fs-5">Pengaturan Presensi &amp; Jam Operasional</div>
+      <div class="sis-sub mb-3">Atur jam buka gerbang, batas hadir tepat waktu, batas toleransi, jam pulang minimal, dan tahun ajaran aktif</div>
+      <form id="pengForm"><div class="row g-3">
+        ${jam('gerbangBuka', 'Gerbang dibuka (HH:mm)', 1)}${jam('terlambat', 'Batas hadir tepat waktu (HH:mm)', 1)}
+        ${jam('batasMasuk', 'Batas toleransi keterlambatan (HH:mm)', 1)}${jam('mulaiPulang', 'Jam pulang minimal (HH:mm)', 1)}
+        ${jam('gerbangBukaJumat', 'Gerbang dibuka hari Jumat (HH:mm)')}${jam('terlambatJumat', 'Batas hadir tepat waktu hari Jumat (HH:mm)')}
+        ${jam('mulaiPulangJumat', 'Jam pulang minimal hari Jumat (HH:mm)')}
+        <div class="col-12 col-md-6"><label class="form-label" for="p_minHariPeringkat">Minimal hari untuk peringkat kehadiran</label><input id="p_minHariPeringkat" name="minHariPeringkat" type="number" min="1" max="31" class="form-control" required></div>
+        <div class="col-12 col-md-6"><label class="form-label" for="p_tahunAjaran">Tahun ajaran aktif</label><input id="p_tahunAjaran" name="tahunAjaran" class="form-control" placeholder="2026/2027" pattern="\\d{4}/\\d{4}"></div>
+        <div class="col-12 col-md-6"><label class="form-label" for="p_fonnteToken">Token API WhatsApp Fonnte (Opsional untuk server otomatis)</label>
+          <div class="input-group"><input id="p_fonnteToken" name="fonnteToken" type="password" class="form-control" autocomplete="new-password"><button type="button" class="btn btn-soft btn-eye" id="btnEyeTok" aria-label="Tampilkan token"><i class="bi bi-eye"></i></button></div></div>
+        <div class="col-12 col-md-6"><label class="form-label" for="p_waOtomatis">Buka WhatsApp Otomatis Setelah Scan (Ya / Tidak)</label><select id="p_waOtomatis" name="waOtomatis" class="form-select"><option>Ya</option><option>Tidak</option></select></div>
+      </div><button class="btn btn-sky mt-3"><i class="bi bi-check2"></i> Simpan Pengaturan</button></form>
+    </div>
+    <div class="sis-card">
+      <div class="sis-title fs-5">Hari Belajar &amp; Hari Libur</div>
+      <div class="sis-sub mb-3">Pada hari yang bukan hari belajar atau tanggal libur, scan ditolak dan siswa <b>tidak</b> ditandai Alpa otomatis.</div>
+      <div class="form-label">Hari belajar rutin</div>
+      <div class="hari-wrap" id="hariWrap">${HARI.map(([n, l]) => `<label class="hari-chip"><input type="checkbox" value="${n}"> ${l}</label>`).join('')}</div>
+      <button type="button" class="btn btn-sky mt-3" id="btnSimpanHari"><i class="bi bi-check2"></i> Simpan Hari Belajar</button>
+      <hr class="my-4">
+      <div class="form-label">Tambah hari libur (tanggal tertentu / rentang)</div>
+      <form id="liburForm" class="row g-2 align-items-end">
+        <div class="col-6 col-md-3"><label class="form-label small text-muted" for="l_dari">Dari tanggal</label><input id="l_dari" type="date" class="form-control" required></div>
+        <div class="col-6 col-md-3"><label class="form-label small text-muted" for="l_sampai">Sampai (opsional)</label><input id="l_sampai" type="date" class="form-control"></div>
+        <div class="col-12 col-md-4"><label class="form-label small text-muted" for="l_ket">Keterangan</label><input id="l_ket" class="form-control" placeholder="mis. Libur Semester, HUT RI" maxlength="100"></div>
+        <div class="col-12 col-md-2"><button class="btn btn-sky w-100"><i class="bi bi-plus-lg"></i> Tambah</button></div>
+      </form>
+      <div id="liburList" class="mt-3 d-grid gap-2"></div>
+    </div>`);
+  $('section-pengaturan').classList.add('sis-scope');
   $('pengForm').onsubmit = e => { e.preventDefault(); api('simpanPengaturan', [Object.fromEntries(new FormData(e.target))], r => toast(r.message, r.success ? 'success' : 'danger')); };
+  $('btnEyeTok').onclick = () => { const i = $('p_fonnteToken'), on = i.type === 'password'; i.type = on ? 'text' : 'password'; $('btnEyeTok').innerHTML = `<i class="bi bi-eye${on ? '-slash' : ''}"></i>`; };
+  $('btnSimpanHari').onclick = () => {
+    const hari = [...document.querySelectorAll('#hariWrap input:checked')].map(i => +i.value);
+    if (!hari.length) return toast('Pilih minimal satu hari belajar.', 'warning');
+    api('simpanHariBelajar', [{ hari }], r => toast(r.message, r.success ? 'success' : 'danger'));
+  };
+  $('liburForm').onsubmit = e => {
+    e.preventDefault();
+    api('tambahLibur', [{ dari: $('l_dari').value, sampai: $('l_sampai').value, ket: $('l_ket').value.trim() }], r => {
+      toast(r.message, r.success ? 'success' : 'danger'); if (r.success) { e.target.reset(); loadPeng(); }
+    });
+  };
+  $('liburList').onclick = e => {
+    const b = e.target.closest('button[data-lib]'); if (!b) return;
+    hapusFn = () => api('hapusLibur', [{ id: b.dataset.lib }], r => { done(r); if (r.success) loadPeng(); });
+    $('hapusTeks').textContent = 'Hapus hari libur ini?'; bootstrap.Modal.getOrCreateInstance($('mdlHapus')).show();
+  };
 }
-function loadPeng() { api('getPengaturan', [{}], r => { if (r.success) Object.entries(r.data).forEach(([k, v]) => { $('pengForm').elements[k].value = v; }); }); }
+function loadPeng() {
+  api('getPengaturan', [{}], r => {
+    if (!r.success) return toast(r.message, 'danger');
+    const d = r.data;
+    PENG_KEYS.forEach(k => { const el = $('pengForm').elements[k]; if (el) el.value = d[k] ?? ''; });
+    document.querySelectorAll('#hariWrap input').forEach(i => { i.checked = d.hariBelajar.includes(+i.value); });
+    $('liburList').innerHTML = d.libur.length ? d.libur.map(x => `<div class="libur-item"><div><b>${esc(tglPendek(x.dari))}${x.sampai && x.sampai !== x.dari ? ' &ndash; ' + esc(tglPendek(x.sampai)) : ''}</b><div class="small text-muted">${esc(x.ket || 'Libur')}</div></div>
+      <button type="button" class="ico-btn2 del" data-lib="${esc(x.id)}" aria-label="Hapus hari libur"><i class="bi bi-trash3"></i></button></div>`).join('')
+      : '<small class="text-muted">Belum ada hari libur tercatat.</small>';
+  });
+}
 // -- Login & sesi
 function showLogin() { $('loginBox').style.display = 'flex'; }
 function logout() { TOKEN = ''; USER = null; sessionStorage.clear(); stopScan(); showLogin(); }
