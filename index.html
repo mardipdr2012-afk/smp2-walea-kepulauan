@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="id" data-theme="dark" data-bs-theme="dark">
+<html lang="id" data-theme="light" data-bs-theme="light">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -31,27 +31,47 @@
       <b id="pageTitle">Dashboard</b><span style="width:40px"></span>
     </div>
 
+    <div class="topnav">
+      <div class="search-pill"><i class="bi bi-search"></i><input id="gSearch" placeholder="Cari siswa (nama, NIS, kelas)..."></div>
+      <button class="icon-btn" id="btnTheme" title="Ganti tema"><i class="bi bi-moon-stars"></i></button>
+      <button class="btn btn-primary" data-go="scan"><i class="bi bi-qr-code-scan"></i> Scan Absen</button>
+    </div>
+
     <!-- DASHBOARD -->
     <section id="section-dashboard" class="content-section active">
-      <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-        <div><h3 class="fw-bold mb-0">Dashboard</h3><small class="text-muted">Statistik kehadiran siswa</small></div>
-        <input type="date" id="dashDate" class="form-control w-auto">
+      <div class="hero">
+        <div class="hero-text">
+          <h2 class="fw-bold mb-1" id="greet">Selamat Datang 👋</h2>
+          <p class="text-muted mb-2">Ringkasan kehadiran siswa SMP Negeri 2 Walea Kepulauan pada tanggal:</p>
+          <input type="date" id="dashDate" class="form-control w-auto mb-3">
+        </div>
+        <img class="hero-img" src="https://res.cloudinary.com/twobznku/image/upload/f_auto/q_auto/logo_ddyozf.png" alt="">
+        <div class="row g-3" id="kpi"></div>
       </div>
-      <div class="row g-3 mb-3" id="kpi"></div>
-      <div class="row g-3 mb-3">
-        <div class="col-md-5"><div class="card p-3"><h6>Komposisi Kehadiran</h6><canvas id="chartStatus" height="220"></canvas></div></div>
-        <div class="col-md-7"><div class="insight-card h-100"><h6><i class="bi bi-lightbulb"></i> Analisis Otomatis</h6><ul id="insights" class="mb-0 ps-3"></ul></div></div>
+      <div class="row g-3">
+        <div class="col-lg-8">
+          <div class="card mb-3"><div class="card-header fw-semibold">Riwayat Scan Terakhir</div>
+            <div class="table-responsive"><table class="table mb-0">
+              <thead><tr><th>Waktu</th><th>Nama</th><th>Kelas</th><th>Jenis</th><th>Status</th></tr></thead>
+              <tbody id="recent"></tbody></table></div></div>
+          <div class="card p-3"><h6 class="fw-bold">Komposisi Kehadiran</h6><canvas id="chartStatus" height="200"></canvas></div>
+        </div>
+        <div class="col-lg-4">
+          <div class="card p-3 mb-3"><h6 class="fw-bold mb-2">Aksi Cepat</h6>
+            <a class="qa" data-go="scan"><span class="ico"><i class="bi bi-qr-code-scan"></i></span><span><b>Scan Absen</b><small>Catat kehadiran dengan QR</small></span><i class="bi bi-chevron-right ms-auto"></i></a>
+            <a class="qa" data-go="siswa" data-then="btnTambah"><span class="ico"><i class="bi bi-person-plus"></i></span><span><b>Tambah Siswa</b><small>Daftarkan siswa baru</small></span><i class="bi bi-chevron-right ms-auto"></i></a>
+            <a class="qa" data-go="rekap"><span class="ico"><i class="bi bi-table"></i></span><span><b>Rekap Presensi</b><small>Lihat dan cetak rekap</small></span><i class="bi bi-chevron-right ms-auto"></i></a>
+            <a class="qa" data-go="peringkat"><span class="ico"><i class="bi bi-trophy"></i></span><span><b>Peringkat</b><small>Prestasi dan pelanggaran</small></span><i class="bi bi-chevron-right ms-auto"></i></a>
+          </div>
+          <div class="insight-card"><h6><i class="bi bi-lightbulb"></i> Analisis Otomatis</h6><ul id="insights" class="mb-0 ps-3"></ul></div>
+        </div>
       </div>
-      <div class="card"><div class="card-header fw-semibold">Riwayat Scan Terakhir</div>
-        <div class="table-responsive"><table class="table mb-0">
-          <thead><tr><th>Waktu</th><th>Nama</th><th>Kelas</th><th>Jenis</th><th>Status</th></tr></thead>
-          <tbody id="recent"></tbody></table></div></div>
     </section>
 
     <!-- DATA SISWA -->
     <section id="section-siswa" class="content-section">
       <div class="d-flex justify-content-between align-items-center mb-3">
-        <h3 class="fw-bold mb-0">Data Siswa</h3>
+        <div><h3 class="fw-bold mb-1">Data Siswa</h3><div class="d-flex gap-2 flex-wrap mt-2" id="jkTabs"><button class="pill-tab active" data-jk="">Semua</button><button class="pill-tab" data-jk="L">Laki-laki</button><button class="pill-tab" data-jk="P">Perempuan</button></div></div>
         <button class="btn btn-primary" id="btnTambah"><i class="bi bi-plus-lg"></i> Tambah Siswa</button>
       </div>
       <div class="card"><div class="table-responsive"><table class="table mb-0">

@@ -51,13 +51,14 @@ function navigateTo(id) {
 
 // ===== DASHBOARD =====
 function loadDash() {
+  $('greet').textContent = salam() + (USER ? ', ' + String(USER.nama).split(' ')[0] : '') + ' 👋';
   if (!$('dashDate').value) $('dashDate').value = new Date().toLocaleDateString('sv-SE');
   api('getDashboardData', [$('dashDate').value], r => {
     if (!r.success) return toast(r.message, 'danger');
     const x = r.data;
-    const k = [['Total Siswa', x.total, '#3b82f6'], ['Hadir', x.hadir, '#10b981'], ['Terlambat', x.terlambat, '#f59e0b'],
-               ['Izin/Sakit', x.izin, '#06b6d4'], ['Alpa', x.alpa, '#ef4444'], ['Belum Absen', x.belum, '#94a3b8']];
-    $('kpi').innerHTML = k.map(([l, v, c]) => `<div class="col-6 col-md-4 col-xl-2"><div class="stat-card" style="border-left-color:${c}"><div class="v">${v}</div><div class="l">${l}</div></div></div>`).join('');
+    const k = [['Total Siswa', x.total, '#3b82f6', 'people'], ['Hadir', x.hadir, '#10b981', 'check-circle'], ['Terlambat', x.terlambat, '#f59e0b', 'clock'],
+               ['Izin/Sakit', x.izin, '#06b6d4', 'bandaid'], ['Alpa', x.alpa, '#ef4444', 'x-circle'], ['Belum Absen', x.belum, '#94a3b8', 'hourglass-split']];
+    $('kpi').innerHTML = k.map(([l, v, c, i]) => `<div class="col-6 col-md-4 col-xl-2"><div class="stat-card"><span class="ico" style="color:${c}"><i class="bi bi-${i}"></i></span><div class="l">${l}</div><div class="v">${v}</div></div></div>`).join('');
     $('insights').innerHTML = x.insights.map(i => `<li>${esc(i)}</li>`).join('');
     if (chart) chart.destroy();
     chart = new Chart($('chartStatus'), { type: 'doughnut',
@@ -84,7 +85,7 @@ function loadSiswa(cb) {
     const cur = $('fKelas').value;
     $('fKelas').innerHTML = '<option value="Semua">Semua Kelas</option>' + [...new Set(siswa.map(s => s.kelas))].sort().map(k => `<option>${esc(k)}</option>`).join('');
     if ([...$('fKelas').options].some(o => o.value === cur)) $('fKelas').value = cur;
-    cb && cb();
+    filterSiswa(); cb && cb();
   });
 }
 $('siswaBody').addEventListener('click', e => {
@@ -297,13 +298,24 @@ function buildNav() {
   document.querySelectorAll('[data-section]').forEach(l => l.onclick = () => navigateTo(l.dataset.section));
 }
 function start() {
-  $('loginBox').style.display = 'none'; $('userInfo').textContent = USER.nama + ' (' + USER.role + ')';
+  $('loginBox').style.display = 'none'; $('userInfo').innerHTML = `<div class="d-flex align-items-center gap-2"><span class="avatar">${esc(String(USER.nama).charAt(0).toUpperCase())}</span><div><b>${esc(USER.nama)}</b><br><small class="text-muted">${esc(USER.role)}</small></div></div>`;
   buildNav(); loadSiswa(); navigateTo('dashboard');
+}
+
+// ===== TAMPILAN =====
+let SJK = '';
+function salam() { const h = new Date().getHours(); return h < 11 ? 'Selamat Pagi' : h < 15 ? 'Selamat Siang' : h < 18 ? 'Selamat Sore' : 'Selamat Malam'; }
+function filterSiswa() {
+  const q = ($('gSearch').value || '').toLowerCase();
+  document.querySelectorAll('#siswaBody tr').forEach(tr => {
+    const jk = tr.children[3] ? tr.children[3].textContent.trim() : '';
+    tr.style.display = (tr.textContent.toLowerCase().includes(q) && (!SJK || jk === SJK)) ? '' : 'none';
+  });
 }
 
 // ===== INISIALISASI =====
 document.addEventListener('DOMContentLoaded', () => {
-  setTheme(localStorage.getItem('theme') || 'dark');
+  setTheme(localStorage.getItem('theme') || 'light');
   $('themeSwitch').onchange = () => setTheme($('themeSwitch').checked ? 'dark' : 'light');
   $('btnMenu').onclick = $('btnMenu2').onclick = () => toggleSidebar();
   $('dashDate').onchange = loadDash; $('btnRekap').onclick = loadRekap; $('btnLogout').onclick = logout;
@@ -326,5 +338,9 @@ document.addEventListener('DOMContentLoaded', () => {
       sessionStorage.setItem('tk', TOKEN); sessionStorage.setItem('usr', JSON.stringify(USER)); $('lPass').value = ''; start();
     });
   };
+  document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => { navigateTo(b.dataset.go); if (b.dataset.then) $(b.dataset.then).click(); });
+  $('btnTheme').onclick = () => $('themeSwitch').click();
+  $('jkTabs').onclick = e => { const b = e.target.closest('button'); if (!b) return; SJK = b.dataset.jk; document.querySelectorAll('#jkTabs .pill-tab').forEach(x => x.classList.toggle('active', x === b)); filterSiswa(); };
+  $('gSearch').oninput = () => { if (!$('section-siswa').classList.contains('active')) navigateTo('siswa'); filterSiswa(); };
   TOKEN && USER ? start() : showLogin();
 });
