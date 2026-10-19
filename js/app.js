@@ -15,13 +15,13 @@ const ARG_MAP = {
   simpanAbsensi: a => ({ nis: a[0], status: a[1], ket: a[2], jenis: a[3] }), getDashboardData: a => ({ iso: a[0] }), getRekap: a => a[0]
 };
 /** Semua panggilan server lewat fetch ke GAS (POST text/plain agar tidak kena CORS preflight) */
-function api(fn, args, ok, loader = true) {
+function api(fn, args, ok, loader = true, fail) {
   if (!GAS_URL || GAS_URL.includes('PASTE')) return toast('GAS_URL belum diisi di js/config.js', 'danger');
   if (loader) spin(1);
   fetch(GAS_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: fn, token: TOKEN, data: (ARG_MAP[fn] || (a => a[0] || {}))(args) }) })
     .then(r => r.json())
     .then(r => { if (loader) spin(0); if (r && r.code === 'AUTH') return logout(); ok && ok(r); },
-          e => { if (loader) spin(0); scanBusy = false; toast('Gagal terhubung ke server: ' + ((e && e.message) || e), 'danger'); });
+          e => { if (loader) spin(0); scanBusy = false; toast('Gagal terhubung ke server: ' + ((e && e.message) || e), 'danger'); fail && fail(e); });
 }
 const badge = s => ({ Hadir: 'success', Terlambat: 'warning', Alpa: 'danger' }[s] || 'info');
 
@@ -73,59 +73,200 @@ function loadDash() {
   });
 }
 
-// ===== DATA SISWA =====
+// ===== DATA SISWA (Data Induk) =====
+let sisEdit = null, fotoMode = 'keep', kartuSiswa = null, hapusFn = null;   // fotoMode: keep | ganti | hapus
+const fotoCache = {};                                                        // nis -> dataURL ('' = tanpa foto)
+const isAdmin = () => !!(USER && USER.role === 'admin');
+const isAktif = s => s.status !== 'Nonaktif';
+const waNum = h => { let d = String(h || '').replace(/\D/g, ''); if (d.startsWith('0')) d = '62' + d.slice(1); else if (d.startsWith('8')) d = '62' + d; return d; };
+const fmtTgl = iso => new Date(iso + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+
 function loadSiswa(cb) {
   api('getSiswa', [], r => {
     if (!r.success) return toast(r.message, 'danger');
     siswa = r.data;
-    $('siswaBody').innerHTML = siswa.length ? siswa.map(s => `<tr><td>${esc(s.nis)}</td><td><b>${esc(s.nama)}</b></td><td>${esc(s.kelas)}</td><td>${esc(s.jk)}</td>
-      <td class="text-nowrap"><button class="btn btn-sm btn-primary" data-act="kartu" data-nis="${esc(s.nis)}">Kartu Pelajar</button>
-      <button class="btn btn-sm btn-danger" data-act="hapus" data-nis="${esc(s.nis)}">Hapus</button></td></tr>`).join('')
-      : '<tr><td colspan="5" class="text-center text-muted">Belum ada data siswa.</td></tr>';
-    $('mNis').innerHTML = '<option value="">-- Pilih Siswa --</option>' + siswa.map(s => `<option value="${esc(s.nis)}">${esc(s.nis)} - ${esc(s.nama)}</option>`).join('');
-    const cur = $('fKelas').value;
-    $('fKelas').innerHTML = '<option value="Semua">Semua Kelas</option>' + [...new Set(siswa.map(s => s.kelas))].sort().map(k => `<option>${esc(k)}</option>`).join('');
-    if ([...$('fKelas').options].some(o => o.value === cur)) $('fKelas').value = cur;
-    filterSiswa(); cb && cb();
+    $('mNis').innerHTML = '<option value="">-- Pilih Siswa --</option>' + siswa.filter(isAktif).map(s => `<option value="${esc(s.nis)}">${esc(s.nis)} - ${esc(s.nama)}</option>`).join('');
+    const kls = [...new Set(siswa.map(s => s.kelas))].sort();
+    const opt = '<option value="Semua">Semua Kelas</option>' + kls.map(k => `<option>${esc(k)}</option>`).join('');
+    ['fKelas', 'sKelas'].forEach(id => { const cur = $(id).value; $(id).innerHTML = opt; if ([...$(id).options].some(o => o.value === cur)) $(id).value = cur; });
+    $('dlKelas').innerHTML = kls.map(k => `<option value="${esc(k)}">`).join('');
+    renderSiswa(); muatFoto(siswa.map(s => s.nis)); cb && cb();
   });
+}
+function renderSiswa() {
+  const q = ($('sSearch').value || '').trim().toLowerCase(), k = $('sKelas').value, st = $('sStatus').value;
+  const a = siswa.filter(s => (!q || (s.nama + ' ' + s.nis + ' ' + s.nisn).toLowerCase().includes(q)) && (k === 'Semua' || s.kelas === k) && (st === 'Semua' || s.status === st));
+  const n = siswa.filter(isAktif).length;
+  $('stTotal').textContent = siswa.length; $('stAktif').textContent = n; $('stNon').textContent = siswa.length - n;
+  $('siswaBody').innerHTML = a.length ? a.map((s, i) => {
+    const on = isAktif(s), nis = esc(s.nis);
+    return `<tr><td class="text-muted">${i + 1}</td>
+      <td><div class="d-flex align-items-center gap-3"><span class="sis-ava" data-nis="${nis}"><i class="bi bi-person-fill"></i></span><b>${esc(s.nama)}</b></div></td>
+      <td><b>${nis}</b><div class="small text-muted">NISN: ${esc(s.nisn || '-')}</div></td>
+      <td><span class="chip">${esc(s.kelas)}</span> <span class="chip chip-${s.jk === 'P' ? 'p' : 'l'}">${esc(s.jk)}</span></td>
+      <td>${s.hp ? `<a class="wa-link" href="https://wa.me/${waNum(s.hp)}" target="_blank" rel="noopener"><i class="bi bi-whatsapp"></i> ${esc(s.hp)}</a>` : '<span class="text-muted">-</span>'}</td>
+      <td><span class="st-pill ${on ? 'on' : 'off'}"><i class="bi bi-${on ? 'check-circle-fill' : 'dash-circle-fill'}"></i> ${on ? 'Aktif' : 'Nonaktif'}</span></td>
+      <td class="text-end text-nowrap"><button class="btn btn-soft btn-sm" data-act="kartu" data-nis="${nis}"><i class="bi bi-person-vcard"></i> Kartu</button>
+        <button class="ico-btn2" data-act="edit" data-nis="${nis}" title="Ubah data" aria-label="Ubah data"><i class="bi bi-pencil"></i></button>
+        <button class="ico-btn2" data-act="status" data-nis="${nis}" title="${on ? 'Nonaktifkan' : 'Aktifkan'}" aria-label="${on ? 'Nonaktifkan' : 'Aktifkan'}"><i class="bi bi-${on ? 'pause-fill' : 'play-fill'}"></i></button>
+        ${isAdmin() ? `<button class="ico-btn2 del" data-act="hapus" data-nis="${nis}" title="Hapus" aria-label="Hapus"><i class="bi bi-trash3"></i></button>` : ''}</td></tr>`;
+  }).join('') : '<tr><td colspan="7" class="text-center text-muted py-4">Tidak ada data siswa.</td></tr>';
+  pasangFoto();
+}
+// -- Foto: dimuat bertahap (8 siswa per panggilan) lalu disimpan di memori
+function pasangFoto() {
+  document.querySelectorAll('.sis-ava[data-nis]').forEach(el => {
+    const f = fotoCache[el.dataset.nis];
+    if (f && !el.querySelector('img')) { const im = new Image(); im.alt = ''; im.src = f; el.textContent = ''; el.appendChild(im); }
+  });
+}
+function muatFoto(list, cb) {
+  const perlu = list.filter(n => !(n in fotoCache)), chunks = [];
+  for (let i = 0; i < perlu.length; i += 8) chunks.push(perlu.slice(i, i + 8));
+  let i = 0;
+  (function next() {
+    if (i >= chunks.length) return cb && cb();
+    const c = chunks[i++];
+    api('getFotoBatch', [{ list: c }], r => {
+      c.forEach(n => { const f = r.success && r.data ? String(r.data[n] || '') : ''; fotoCache[n] = f.startsWith('data:image/') ? f : ''; });
+      pasangFoto(); next();
+    }, false, () => cb && cb());
+  })();
 }
 $('siswaBody').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   const s = siswa.find(x => x.nis === b.dataset.nis); if (!s) return;
   if (b.dataset.act === 'kartu') bukaKartu(s);
-  if (b.dataset.act === 'hapus') { hapusNis = s.nis; hapusFn = null; $('hapusTeks').textContent = `Hapus siswa ${s.nama} (NIS ${s.nis})?`; bootstrap.Modal.getOrCreateInstance($('mdlHapus')).show(); }
+  if (b.dataset.act === 'edit') bukaForm(s);
+  if (b.dataset.act === 'status') {
+    const baru = isAktif(s) ? 'Nonaktif' : 'Aktif';
+    api('ubahStatusSiswa', [{ nis: s.nis, status: baru }], r => { toast(r.message, r.success ? 'success' : 'danger'); if (r.success) loadSiswa(); });
+  }
+  if (b.dataset.act === 'hapus') { hapusFn = () => api('hapusSiswa', [s.nis], r => { done(r); if (r.success) loadSiswa(); }); $('hapusTeks').textContent = `Hapus siswa ${s.nama} (NIS ${s.nis})?`; bootstrap.Modal.getOrCreateInstance($('mdlHapus')).show(); }
 });
-let hapusFn = null;
 function done(r) { bootstrap.Modal.getInstance($('mdlHapus')).hide(); toast(r.message, r.success ? 'success' : 'danger'); }
-$('btnHapusOk').onclick = () => (hapusFn || (() => api('hapusSiswa', [hapusNis], r => { done(r); if (r.success) loadSiswa(); })))();
-$('btnTambah').onclick = () => { $('formSiswa').reset(); $('formSiswa').classList.remove('was-validated'); $('fPrev').classList.add('d-none'); fotoB64 = ''; bootstrap.Modal.getOrCreateInstance($('mdlSiswa')).show(); };
-$('fFoto').onchange = e => {
-  const f = e.target.files[0]; fotoB64 = ''; $('fPrev').classList.add('d-none'); if (!f) return;
+$('btnHapusOk').onclick = () => hapusFn && hapusFn();
+
+// -- Form tambah / ubah
+function setFoto(src, mode) {
+  fotoB64 = src || ''; fotoMode = mode;
+  const box = $('fPrevBox'); box.textContent = '';
+  if (src) { const im = new Image(); im.alt = 'Pas foto'; im.src = src; box.appendChild(im); }
+  else box.innerHTML = '<i class="bi bi-person-bounding-box"></i><small>Pas Foto</small>';
+}
+function bukaForm(s) {
+  sisEdit = s ? s.nis : null;
+  $('formSiswa').reset(); $('formSiswa').classList.remove('was-validated');
+  $('sisFormTitle').textContent = s ? 'Ubah Data Siswa' : 'Tambah Siswa Baru';
+  $('fNis').readOnly = !!s;
+  if (s) { $('fNis').value = s.nis; $('fNisn').value = s.nisn; $('fNama').value = s.nama; $('fTempat').value = s.tempat; $('fTgl2').value = s.tglLahir; $('fJk').value = s.jk; $('fKls').value = s.kelas; $('fHp').value = s.hp; $('fStatus').value = s.status; }
+  setFoto('', 'keep');
+  if (s) {
+    if (fotoCache[s.nis]) setFoto(fotoCache[s.nis], 'keep');
+    else api('getFotoSiswa', [s.nis], r => {
+      const f = r.success ? String(r.data || '') : ''; fotoCache[s.nis] = f.startsWith('data:image/') ? f : '';
+      if (sisEdit === s.nis && fotoMode === 'keep' && fotoCache[s.nis]) setFoto(fotoCache[s.nis], 'keep');
+    }, false);
+  }
+  bootstrap.Modal.getOrCreateInstance($('mdlSiswa')).show();
+}
+function prosesFoto(f) {   // potong ke rasio 3x4, kecilkan, kompres agar muat di sel Sheets
+  if (!f) return;
   const rd = new FileReader();
-  rd.onload = ev => { const img = new Image(); img.onload = () => {
-    const c = document.createElement('canvas'); c.width = 200; c.height = Math.round(img.height * 200 / img.width);
-    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-    fotoB64 = c.toDataURL('image/jpeg', 0.6); $('fPrev').src = fotoB64; $('fPrev').classList.remove('d-none');
-  }; img.src = ev.target.result; };
+  rd.onload = ev => {
+    const img = new Image();
+    img.onerror = () => toast('File bukan gambar yang valid.', 'danger');
+    img.onload = () => {
+      const W = 240, H = 320, c = document.createElement('canvas'); c.width = W; c.height = H;
+      const sr = 3 / 4, ir = img.width / img.height; let sw, sh, sx, sy;
+      if (ir > sr) { sh = img.height; sw = sh * sr; sx = (img.width - sw) / 2; sy = 0; } else { sw = img.width; sh = sw / sr; sx = 0; sy = (img.height - sh) / 4; }
+      c.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, W, H);
+      let q = .75, d = c.toDataURL('image/jpeg', q);
+      while (d.length > 44000 && q > .3) { q -= .1; d = c.toDataURL('image/jpeg', q); }
+      setFoto(d, 'ganti');
+    };
+    img.src = ev.target.result;
+  };
   rd.readAsDataURL(f);
-};
+}
+$('btnTambah').onclick = () => bukaForm(null);
+$('btnAmbil').onclick = () => $('fFotoCam').click();
+$('btnPilih').onclick = () => $('fFotoFile').click();
+$('btnHapusFoto').onclick = () => setFoto('', sisEdit ? 'hapus' : 'keep');
+['fFotoCam', 'fFotoFile'].forEach(id => { $(id).onchange = e => { prosesFoto(e.target.files[0]); e.target.value = ''; }; });
 $('formSiswa').onsubmit = e => {
   e.preventDefault(); $('formSiswa').classList.add('was-validated');
   if (!$('formSiswa').checkValidity()) return;
-  api('simpanSiswa', [{ nis: $('fNis').value, nama: $('fNama').value, kelas: $('fKls').value, jk: $('fJk').value, foto: fotoB64 }], r => {
+  const d = { nis: $('fNis').value.trim(), nisn: $('fNisn').value.trim(), nama: $('fNama').value.trim(), tempat: $('fTempat').value.trim(), tglLahir: $('fTgl2').value,
+    jk: $('fJk').value, kelas: $('fKls').value.trim(), hp: $('fHp').value.trim(), status: $('fStatus').value };
+  if (sisEdit) { d.fotoMode = fotoMode; if (fotoMode === 'ganti') d.foto = fotoB64; } else d.foto = fotoMode === 'ganti' ? fotoB64 : '';
+  api(sisEdit ? 'ubahSiswa' : 'simpanSiswa', [d], r => {
     toast(r.message, r.success ? 'success' : 'danger');
-    if (r.success) { bootstrap.Modal.getInstance($('mdlSiswa')).hide(); loadSiswa(); }
+    if (r.success) { delete fotoCache[d.nis]; bootstrap.Modal.getInstance($('mdlSiswa')).hide(); loadSiswa(); }
   });
 };
 
-// ===== KARTU PELAJAR (foto dimuat sesuai kebutuhan) =====
-function bukaKartu(s) {
-  $('kNama').textContent = s.nama; $('kNis').textContent = 'NIS: ' + s.nis; $('kKelas').textContent = 'Kelas: ' + s.kelas;
-  $('kFoto').innerHTML = 'Tanpa<br>Foto'; $('kQr').innerHTML = '';
-  new QRCode($('kQr'), { text: s.nis, width: 90, height: 90, correctLevel: QRCode.CorrectLevel.H });
-  bootstrap.Modal.getOrCreateInstance($('mdlKartu')).show();
-  api('getFotoSiswa', [s.nis], r => { if (r.success && String(r.data).startsWith('data:image')) $('kFoto').innerHTML = `<img src="${r.data}">`; }, false);
+// -- Kartu pelajar
+function kartuHTML(s, foto) {
+  const ttl = [s.tempat, s.tglLahir ? fmtTgl(s.tglLahir) : ''].filter(Boolean).join(', ') || '-';
+  const row = (l, v) => `<tr><td>${l}</td><td>:</td><td>${v}</td></tr>`;
+  return `<div class="idc"><div class="idc-head"><img src="${esc(SEKOLAH.logo)}" crossorigin="anonymous" alt="">
+    <div><div class="idc-pem">${esc(SEKOLAH.pemda)}<br>${esc(SEKOLAH.dinas)}</div><div class="idc-sch">${esc(SEKOLAH.nama)}</div>${SEKOLAH.alamat ? `<div class="idc-adr">${esc(SEKOLAH.alamat)}</div>` : ''}</div></div>
+    <div class="idc-line"></div>
+    <div class="idc-body"><div class="idc-top">
+      <div class="idc-foto">${foto ? `<img src="${foto}" alt="">` : '<i class="bi bi-person-fill"></i><b>Pas Foto</b><small>3&times;4</small>'}</div>
+      <div class="idc-qrwrap"><div class="idc-qr" data-qr="${esc(s.nis)}"></div><div class="idc-qrl"><i class="bi bi-qr-code"></i> QR Presensi</div></div></div>
+      <table class="idc-info">${row('Nama', `<b>${esc(String(s.nama).toUpperCase())}</b>`)}${row('NIS / NISN', `<b>${esc(s.nis)}${s.nisn ? ' / ' + esc(s.nisn) : ''}</b>`)}${row('Jenis Kelamin', `<b>${s.jk === 'P' ? 'Perempuan' : 'Laki-laki'}</b>`)}${row('TTL', `<b>${esc(ttl)}</b>`)}${row('Kelas', `<b>${esc(s.kelas)}</b>`)}${row('No. HP Ortu', s.hp ? `<i class="bi bi-whatsapp" style="color:#22c55e"></i> ${esc(s.hp)}` : '-')}</table></div>
+    <div class="idc-foot">Kartu identitas resmi siswa ${esc(SEKOLAH.nama)}.<br>Harap bawa kartu ini setiap hari untuk presensi.</div></div>`;
 }
+function isiQR(root) {
+  root.querySelectorAll('[data-qr]').forEach(el => { el.innerHTML = ''; new QRCode(el, { text: el.dataset.qr, width: 110, height: 110, correctLevel: QRCode.CorrectLevel.H }); });
+}
+function renderKartu() {
+  if (!kartuSiswa) return;
+  $('kartuWrap').innerHTML = kartuHTML(kartuSiswa, fotoCache[kartuSiswa.nis] || '');
+  $('kartuWrap').firstElementChild.id = 'kartu'; isiQR($('kartuWrap'));
+}
+function bukaKartu(s) {
+  kartuSiswa = s; renderKartu();
+  bootstrap.Modal.getOrCreateInstance($('mdlKartu')).show();
+  if (!(s.nis in fotoCache)) api('getFotoSiswa', [s.nis], r => {
+    const f = r.success ? String(r.data || '') : ''; fotoCache[s.nis] = f.startsWith('data:image/') ? f : '';
+    if (kartuSiswa === s) renderKartu();
+  }, false);
+}
+$('btnPng').onclick = () => {
+  const el = $('kartu'); if (!el) return;
+  if (!window.html2canvas) return toast('Fitur unduh belum siap. Muat ulang halaman.', 'danger');
+  spin(1);
+  html2canvas(el, { scale: 3, useCORS: true, backgroundColor: null }).then(c => { const a = document.createElement('a'); a.download = 'Kartu-' + kartuSiswa.nis + '.png'; a.href = c.toDataURL('image/png'); a.click(); })
+    .catch(() => toast('Gagal membuat gambar kartu.', 'danger')).finally(() => spin(0));
+};
+$('btnWa').onclick = () => {
+  const s = kartuSiswa; if (!s) return;
+  if (!s.hp) return toast('No. HP orang tua belum diisi. Ubah data siswa terlebih dahulu.', 'warning');
+  const msg = `Yth. Orang Tua/Wali dari ${s.nama} (Kelas ${s.kelas}),\n\nBerikut kartu pelajar ${SEKOLAH.nama} atas nama ${s.nama} (NIS ${s.nis}). Mohon kartu dibawa setiap hari untuk presensi.\n\nTerima kasih.`;
+  window.open('https://wa.me/' + waNum(s.hp) + '?text=' + encodeURIComponent(msg), '_blank', 'noopener');
+  toast('Unduh gambar kartu (PNG) lalu lampirkan di chat WhatsApp.', 'primary');
+};
+// -- Cetak kartu satu kelas
+function infoCetak() { $('cInfo').textContent = siswa.filter(s => isAktif(s) && s.kelas === $('cKelas').value).length + ' kartu siswa aktif akan dicetak.'; }
+$('btnCetakKelas').onclick = () => {
+  const ks = [...new Set(siswa.filter(isAktif).map(s => s.kelas))].sort();
+  if (!ks.length) return toast('Belum ada siswa aktif.', 'warning');
+  $('cKelas').innerHTML = ks.map(k => `<option>${esc(k)}</option>`).join('');
+  if (ks.includes($('sKelas').value)) $('cKelas').value = $('sKelas').value;
+  infoCetak(); bootstrap.Modal.getOrCreateInstance($('mdlCetakKelas')).show();
+};
+$('cKelas').onchange = infoCetak;
+$('btnCetakGo').onclick = () => {
+  const list = siswa.filter(s => isAktif(s) && s.kelas === $('cKelas').value);
+  bootstrap.Modal.getInstance($('mdlCetakKelas')).hide(); spin(1);
+  muatFoto(list.map(s => s.nis), () => {
+    $('printArea').innerHTML = list.map(s => kartuHTML(s, fotoCache[s.nis] || '')).join(''); isiQR($('printArea'));
+    spin(0); setTimeout(() => cetak('kelas'), 500);
+  });
+};
 function cetak(mode) {
   document.body.classList.add('print-' + mode); window.print(); document.body.classList.remove('print-' + mode);
 }
@@ -249,7 +390,7 @@ function openForm(id) {
   const m = MOD[id]; $('formTitle').textContent = 'Tambah ' + m.t; $('genForm').dataset.mod = id;
   $('formBody').innerHTML = m.f.map(([k, l, t, o]) => {
     const inp = t === 'select' ? `<select class="form-select" name="${k}">${o.map(v => `<option>${v}</option>`).join('')}</select>`
-      : t === 'siswa' ? `<select class="form-select" name="${k}" required>${siswa.map(s => `<option value="${esc(s.nis)}">${esc(s.nama)} (${esc(s.kelas)})</option>`).join('')}</select>`
+      : t === 'siswa' ? `<select class="form-select" name="${k}" required>${siswa.filter(isAktif).map(s => `<option value="${esc(s.nis)}">${esc(s.nama)} (${esc(s.kelas)})</option>`).join('')}</select>`
       : `<input class="form-control" name="${k}" type="${t || 'text'}" ${t === 'number' ? 'min="0"' : ''} ${t === 'date' ? `value="${today()}"` : ''} ${k === 'ket' ? '' : 'required'}>`;
     return `<div class="mb-3"><label class="form-label">${l}</label>${inp}</div>`;
   }).join('');
@@ -304,21 +445,12 @@ function start() {
 }
 
 // ===== TAMPILAN =====
-let SJK = '';
 function setDateText() {
   const d = new Date($('dashDate').value + 'T00:00:00');
   $('dateText').textContent = d.toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' }).toUpperCase();
   $('dayText').textContent = d.toLocaleDateString('id-ID', { weekday: 'long' }).toUpperCase();
 }
 function salam() { const h = new Date().getHours(); return h < 11 ? 'Selamat Pagi' : h < 15 ? 'Selamat Siang' : h < 18 ? 'Selamat Sore' : 'Selamat Malam'; }
-function filterSiswa() {
-  const q = ($('gSearch').value || '').toLowerCase();
-  document.querySelectorAll('#siswaBody tr').forEach(tr => {
-    const jk = tr.children[3] ? tr.children[3].textContent.trim() : '';
-    tr.style.display = (tr.textContent.toLowerCase().includes(q) && (!SJK || jk === SJK)) ? '' : 'none';
-  });
-}
-
 // ===== INISIALISASI =====
 document.addEventListener('DOMContentLoaded', () => {
   setTheme(localStorage.getItem('theme') || 'light');
@@ -348,7 +480,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const openDate = () => { try { $('dashDate').showPicker(); } catch (e) { $('dashDate').focus(); } };
   $('dateBadge').onclick = openDate; $('dateBadge').onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDate(); } };
   $('btnTheme').onclick = () => $('themeSwitch').click();
-  $('jkTabs').onclick = e => { const b = e.target.closest('button'); if (!b) return; SJK = b.dataset.jk; document.querySelectorAll('#jkTabs .pill-tab').forEach(x => x.classList.toggle('active', x === b)); filterSiswa(); };
-  $('gSearch').oninput = () => { if (!$('section-siswa').classList.contains('active')) navigateTo('siswa'); filterSiswa(); };
+  $('sSearch').oninput = renderSiswa; $('sKelas').onchange = renderSiswa; $('sStatus').onchange = renderSiswa;
+  $('gSearch').oninput = () => { if (!$('section-siswa').classList.contains('active')) navigateTo('siswa'); $('sSearch').value = $('gSearch').value; renderSiswa(); };
   TOKEN && USER ? start() : showLogin();
 });
