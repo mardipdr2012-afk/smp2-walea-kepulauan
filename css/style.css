@@ -46,3 +46,18 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
   body.print-rekap .main-content { margin: 0; padding: 0; }
   body.print-rekap { background: #fff; color: #000; }
 }
+
+.login-wrap { position: fixed; inset: 0; z-index: 3000; background: var(--bg); display: flex; align-items: center; justify-content: center; padding: 1rem; }
+.bottom-nav { display: none; }
+@media (max-width: 767.98px) {
+  .bottom-nav { display: flex; position: fixed; bottom: 0; left: 0; right: 0; z-index: 900; background: var(--card); border-top: 1px solid var(--border); padding-bottom: env(safe-area-inset-bottom); }
+  .bottom-nav a { flex: 1; text-align: center; padding: .5rem 0; font-size: .7rem; color: var(--muted); cursor: pointer; text-decoration: none; }
+  .bottom-nav a i { display: block; font-size: 1.35rem; }
+  .bottom-nav a.active { color: var(--accent); font-weight: 600; }
+  .main-content { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
+  .topbar { position: sticky; top: 0; z-index: 850; background: var(--bg); padding: .25rem 0; }
+  .form-control, .form-select { font-size: 16px; min-height: 44px; } .btn { min-height: 44px; }
+  .d-flex.flex-wrap > .form-select, .d-flex.flex-wrap > .btn, .d-flex.flex-wrap > input { flex: 1 1 45%; }
+  .table { font-size: .85rem; } .table td, .table th { padding: .6rem .5rem; } h3 { font-size: 1.3rem; }
+  .toast-container { bottom: 76px !important; }
+}
