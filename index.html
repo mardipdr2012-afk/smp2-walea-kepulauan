@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="id" data-theme="dark" data-bs-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ABSEN SISWA – SMP Negeri 2 Walea Kepulauan</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="css/style.css" rel="stylesheet">
+</head>
+<body>
+  <div id="loader" class="loader"><div class="spinner-border text-primary"></div></div>
+
+  <nav id="sidebar" class="sidebar">
+    <div class="sidebar-header">
+      <img src="img/logo.png" alt="Logo">
+      <div><b>ABSEN SISWA</b><small>SMP Negeri 2 Walea Kepulauan</small></div>
+    </div>
+    <ul class="sidebar-nav">
+      <li><a class="nav-link active" data-section="dashboard"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
+      <li><a class="nav-link" data-section="siswa"><i class="bi bi-people"></i> Data Siswa</a></li>
+      <li><a class="nav-link" data-section="scan"><i class="bi bi-qr-code-scan"></i> Scan Absen</a></li>
+      <li><a class="nav-link" data-section="rekap"><i class="bi bi-table"></i> Rekap Absen</a></li>
+    </ul>
+    <div class="sidebar-footer form-check form-switch">
+      <input class="form-check-input" type="checkbox" id="themeSwitch">
+      <label class="form-check-label" for="themeSwitch"><i class="bi bi-moon-stars"></i> Mode Gelap</label>
+    </div>
+  </nav>
+
+  <main class="main-content">
+    <div class="topbar">
+      <button class="btn btn-link text-reset" id="btnMenu"><i class="bi bi-list fs-3"></i></button>
+      <b id="pageTitle">Dashboard</b><span style="width:40px"></span>
+    </div>
+
+    <!-- DASHBOARD -->
+    <section id="section-dashboard" class="content-section active">
+      <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+        <div><h3 class="fw-bold mb-0">Dashboard</h3><small class="text-muted">Statistik kehadiran siswa</small></div>
+        <input type="date" id="dashDate" class="form-control w-auto">
+      </div>
+      <div class="row g-3 mb-3" id="kpi"></div>
+      <div class="row g-3 mb-3">
+        <div class="col-md-5"><div class="card p-3"><h6>Komposisi Kehadiran</h6><canvas id="chartStatus" height="220"></canvas></div></div>
+        <div class="col-md-7"><div class="insight-card h-100"><h6><i class="bi bi-lightbulb"></i> Analisis Otomatis</h6><ul id="insights" class="mb-0 ps-3"></ul></div></div>
+      </div>
+      <div class="card"><div class="card-header fw-semibold">Riwayat Scan Terakhir</div>
+        <div class="table-responsive"><table class="table mb-0">
+          <thead><tr><th>Waktu</th><th>Nama</th><th>Kelas</th><th>Jenis</th><th>Status</th></tr></thead>
+          <tbody id="recent"></tbody></table></div></div>
+    </section>
+
+    <!-- DATA SISWA -->
+    <section id="section-siswa" class="content-section">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h3 class="fw-bold mb-0">Data Siswa</h3>
+        <button class="btn btn-primary" id="btnTambah"><i class="bi bi-plus-lg"></i> Tambah Siswa</button>
+      </div>
+      <div class="card"><div class="table-responsive"><table class="table mb-0">
+        <thead><tr><th>NIS</th><th>Nama Lengkap</th><th>Kelas</th><th>L/P</th><th>Aksi</th></tr></thead>
+        <tbody id="siswaBody"></tbody></table></div></div>
+    </section>
+
+    <!-- SCAN -->
+    <section id="section-scan" class="content-section">
+      <h3 class="fw-bold mb-1">Scan Absen</h3>
+      <p class="text-muted">Arahkan QR Code siswa ke kamera, upload foto QR, atau input manual</p>
+      <div class="card p-3 mb-3">
+        <div class="d-flex justify-content-center align-items-center gap-2 flex-wrap">
+          <b>Jenis Absen:</b>
+          <select id="jenis" class="form-select w-auto">
+            <option value="Masuk">Masuk</option><option value="Pulang">Pulang</option><option value="Mata Pelajaran">Guru Mata Pelajaran</option>
+          </select>
+          <input id="mapel" class="form-control w-auto d-none" placeholder="Nama Mata Pelajaran">
+        </div>
+      </div>
+      <div class="row g-3">
+        <div class="col-md-6">
+          <div class="scan-box"><div id="camOverlay" class="text-center p-3">
+            <p class="text-muted">Tekan tombol untuk mengaktifkan kamera atau upload gambar QR.</p>
+            <button class="btn btn-primary btn-lg" onclick="$('qrFile').click()"><i class="bi bi-camera"></i> Ambil Foto / Upload QR</button>
+          </div><div id="reader"></div></div>
+          <input type="file" id="qrFile" accept="image/*" capture="environment" class="d-none">
+          <div class="d-flex gap-2 justify-content-center mt-2 flex-wrap">
+            <button id="btnCamOn" class="btn btn-success" onclick="startScan()"><i class="bi bi-play-fill"></i> Aktifkan Kamera</button>
+            <button id="btnCamOff" class="btn btn-danger d-none" onclick="stopScan()"><i class="bi bi-stop-fill"></i> Matikan Kamera</button>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div id="scanResult" class="card p-3 text-center text-muted mb-3">Menunggu scan...</div>
+          <div class="card"><div class="card-header fw-semibold">Input Manual (Tidak Hadir)</div><div class="card-body">
+            <label class="form-label">Pilih Siswa</label><select id="mNis" class="form-select mb-2"></select>
+            <label class="form-label">Status</label><select id="mStatus" class="form-select mb-2"><option>Sakit</option><option>Izin</option><option>Alpa</option></select>
+            <label class="form-label">Keterangan (opsional)</label><input id="mKet" class="form-control mb-3" placeholder="Misal: demam / izin keluarga">
+            <button class="btn btn-warning w-100" id="btnManual">Simpan Manual</button>
+          </div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- REKAP -->
+    <section id="section-rekap" class="content-section">
+      <div class="d-flex justify-content-between flex-wrap gap-2 mb-3 no-print">
+        <div><h3 class="fw-bold mb-0">Rekap Absen</h3><small class="text-muted">Data absensi yang telah masuk</small></div>
+        <div class="d-flex gap-2 flex-wrap align-items-center">
+          <select id="fJenis" class="form-select w-auto"><option value="Sekolah">Absen Sekolah</option><option value="Mata Pelajaran">Mata Pelajaran</option></select>
+          <select id="fKelas" class="form-select w-auto"><option value="Semua">Semua Kelas</option></select>
+          <select id="fTgl" class="form-select w-auto"></select>
+          <select id="fBln" class="form-select w-auto"></select>
+          <select id="fThn" class="form-select w-auto"></select>
+          <button class="btn btn-primary" id="btnRekap"><i class="bi bi-arrow-repeat"></i> Tampilkan</button>
+          <button class="btn btn-success" onclick="cetak('rekap')"><i class="bi bi-printer"></i> Cetak PDF</button>
+        </div>
+      </div>
+      <div class="card"><div class="table-responsive"><table class="table mb-0">
+        <thead id="rekapHead"></thead><tbody id="rekapBody"></tbody></table></div></div>
+    </section>
+  </main>
+
+  <!-- Modal Tambah Siswa -->
+  <div class="modal fade" id="mdlSiswa" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+    <div class="modal-header"><h5 class="modal-title">Tambah Siswa Baru</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+    <form id="formSiswa" novalidate><div class="modal-body row g-3">
+      <div class="col-12"><label class="form-label">NIS</label><input id="fNis" class="form-control" required></div>
+      <div class="col-12"><label class="form-label">Nama Lengkap</label><input id="fNama" class="form-control" required></div>
+      <div class="col-6"><label class="form-label">Kelas</label><input id="fKls" class="form-control" placeholder="7A" required></div>
+      <div class="col-6"><label class="form-label">Jenis Kelamin</label><select id="fJk" class="form-select"><option value="L">Laki-laki</option><option value="P">Perempuan</option></select></div>
+      <div class="col-12"><label class="form-label">Pas Foto</label><input type="file" id="fFoto" accept="image/*" class="form-control">
+        <img id="fPrev" class="mt-2 rounded d-none" style="max-width:130px"></div>
+    </div><div class="modal-footer"><button type="submit" class="btn btn-primary">Simpan</button></div></form>
+  </div></div></div>
+
+  <!-- Modal Kartu Pelajar -->
+  <div class="modal fade" id="mdlKartu" tabindex="-1"><div class="modal-dialog modal-dialog-centered" style="max-width:400px"><div class="modal-content bg-transparent border-0">
+    <div id="kartu" style="background:#fff;border-radius:12px;overflow:hidden;color:#333">
+      <div style="background:#1e3a8a;color:#fff;padding:14px;text-align:center"><b>KARTU PELAJAR</b><div style="font-size:.8rem">SMP Negeri 2 Walea Kepulauan</div></div>
+      <div class="d-flex gap-3 align-items-center justify-content-center p-3">
+        <div class="kartu-foto" id="kFoto">Tanpa<br>Foto</div>
+        <div class="text-center"><div id="kQr" style="padding:5px;background:#fff"></div>
+          <div class="fw-bold mt-2" id="kNama"></div><div id="kNis" style="font-size:.85rem"></div><div id="kKelas" style="font-size:.85rem"></div></div>
+      </div>
+      <div style="background:#f1f5f9;padding:8px;text-align:center;font-size:.7rem;color:#64748b">Harap bawa kartu ini setiap hari untuk absensi.</div>
+    </div>
+    <div class="d-flex gap-2 justify-content-center mt-3">
+      <button class="btn btn-success" onclick="cetak('card')"><i class="bi bi-printer"></i> Cetak Kartu</button>
+      <button class="btn btn-danger" data-bs-dismiss="modal">Tutup</button>
+    </div>
+  </div></div></div>
+
+  <!-- Modal Konfirmasi Hapus -->
+  <div class="modal fade" id="mdlHapus" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+    <div class="modal-header"><h5 class="modal-title">Konfirmasi Hapus</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body" id="hapusTeks"></div>
+    <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Batal</button><button class="btn btn-danger" id="btnHapusOk">Hapus</button></div>
+  </div></div></div>
+
+  <div class="toast-container position-fixed bottom-0 end-0 p-3"><div id="toast" class="toast align-items-center text-bg-primary border-0">
+    <div class="d-flex"><div class="toast-body" id="toastMsg"></div><button class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div></div></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
