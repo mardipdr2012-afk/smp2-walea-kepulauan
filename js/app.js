@@ -707,20 +707,47 @@ function openForm(id) {
   bootstrap.Modal.getOrCreateInstance($('mdlForm')).show();
 }
 // -- Rekap Pelanggaran / Prestasi (ringkasan per siswa)
+const REKC = {};   // id -> { sheet, agg, periode }
 function rekapCatat(id, sheet, title) {
-  mkSection(id, `<div class="d-flex justify-content-between flex-wrap gap-2 mb-3 no-print"><h3 class="fw-bold mb-0">${title}</h3><div class="d-flex gap-2 flex-wrap"><select id="fk-${id}" class="form-select w-auto"></select><button class="btn btn-success" onclick="cetak('rekap')"><i class="bi bi-printer"></i> Cetak</button></div></div>
+  REKC[id] = { sheet, agg: [], periode: 'Semua Periode' };
+  mkSection(id, `<div class="d-flex justify-content-between flex-wrap gap-2 mb-3 no-print"><h3 class="fw-bold mb-0">${title}</h3><div class="d-flex gap-2 flex-wrap align-items-center"><input type="month" id="fb-${id}" class="form-control w-auto" title="Bulan (kosongkan untuk semua periode)"><select id="fk-${id}" class="form-select w-auto"></select><button class="btn btn-soft" id="bh-${id}"><i class="bi bi-printer"></i> Cetak Hasil</button><button class="btn btn-sky" id="bl-${id}"><i class="bi bi-printer-fill"></i> Cetak Lengkap</button></div></div>
     <div class="card"><div class="table-responsive"><table class="table mb-0"><thead><tr><th>#</th><th>Nama</th><th>Kelas</th><th>Jumlah</th><th>Total Poin</th></tr></thead><tbody id="tb-${id}"></tbody></table></div></div>`);
-  $('fk-' + id).onchange = () => loadRekapCatat(id, sheet);
+  $('fk-' + id).onchange = $('fb-' + id).onchange = () => loadRekapCatat(id, sheet);
+  $('bh-' + id).onclick = () => cetakCatat(id, 'hasil'); $('bl-' + id).onclick = () => cetakCatat(id, 'lengkap');
 }
 function loadRekapCatat(id, sheet) {
   kelasOpts($('fk-' + id));
   swr('getList', [{ sheet }], 'list_' + sheet, r => {
     if (!r.success) return toast(r.message, 'danger');
-    const k = $('fk-' + id).value, g = {};
-    r.data.forEach(x => { if (k !== 'Semua' && String(x[4]) !== k) return; const m = g[x[2]] = g[x[2]] || { nama: x[3], kelas: x[4], n: 0, p: 0 }; m.n++; m.p += Number(x[6]) || 0; });
+    const k = $('fk-' + id).value, b = $('fb-' + id).value, [thn, bln] = b ? b.split('-') : ['', ''], g = {};
+    r.data.forEach(x => {
+      if (k !== 'Semua' && String(x[4]) !== k) return;
+      if (b) { const p = String(x[1]).split('/'); if (p[1] !== bln || p[2] !== thn) return; }
+      const m = g[x[2]] = g[x[2]] || { nis: String(x[2]), nama: x[3], kelas: x[4], n: 0, p: 0, list: [] };
+      m.n++; m.p += Number(x[6]) || 0; m.list.push(x);
+    });
     const a = Object.values(g).sort((x, y) => y.p - x.p);
+    REKC[id].agg = a; REKC[id].periode = b ? BLN[+bln - 1] + ' ' + thn : 'Semua Periode';
     $('tb-' + id).innerHTML = a.length ? a.map((m, i) => `<tr><td>${i + 1}</td><td><b>${esc(m.nama)}</b></td><td>${esc(m.kelas)}</td><td>${m.n}</td><td>${m.p}</td></tr>`).join('') : empty(5);
   });
+}
+// Cetak rekap Pelanggaran / Prestasi: kop surat + tabel + tanda tangan Kepala Sekolah & Wali Kelas
+function cetakCatat(id, mode) {
+  const c = REKC[id], a = c.agg || [];
+  if (!a.length) return toast('Tidak ada data untuk dicetak.', 'warning');
+  const nm = c.sheet === 'Pelanggaran' ? 'PELANGGARAN' : 'PRESTASI', jenis = c.sheet === 'Pelanggaran' ? 'Jenis Pelanggaran' : 'Prestasi';
+  const kls = [...new Set(a.map(x => String(x.kelas)))].sort(urutKelas), kf = $('fk-' + id).value === 'Semua' ? 'Semua Kelas' : $('fk-' + id).value;
+  const total = a.reduce((s, x) => s + x.p, 0), kej = a.reduce((s, x) => s + x.n, 0), lengkap = mode === 'lengkap';
+  const tbl = lengkap
+    ? `<table class="lap-tbl"><thead><tr><th>No</th><th>Tanggal</th><th>${jenis}</th><th>Poin</th><th>Keterangan</th><th>Pencatat</th></tr></thead><tbody>`
+      + a.map(m => `<tr class="lap-grp"><td colspan="6">${esc(m.nama)} &bull; NIS ${esc(m.nis)} &bull; Kelas ${esc(m.kelas)} &bull; ${m.n} catatan &bull; Total ${m.p} poin</td></tr>`
+        + m.list.map((x, i) => `<tr><td class="c">${i + 1}</td><td class="c">${esc(x[1])}</td><td>${esc(x[5])}</td><td class="c">${esc(x[6])}</td><td>${esc(x[7] || '-')}</td><td>${esc(x[8] || '-')}</td></tr>`).join('')).join('') + '</tbody></table>'
+    : '<table class="lap-tbl"><thead><tr><th>No</th><th>Nama Siswa</th><th>NIS</th><th>Kelas</th><th>Jumlah</th><th>Total Poin</th></tr></thead><tbody>'
+      + a.map((m, i) => `<tr><td class="c">${i + 1}</td><td>${esc(m.nama)}</td><td class="c">${esc(m.nis)}</td><td class="c">${esc(m.kelas)}</td><td class="c">${m.n}</td><td class="c">${m.p}</td></tr>`).join('') + '</tbody></table>';
+  $('laporan').innerHTML = kopHTML() + `<div class="lap-judul">LAPORAN ${lengkap ? 'LENGKAP' : 'REKAPITULASI'} ${nm} SISWA</div><div class="lap-meta">Periode: <b>${esc(c.periode)}</b> | Kelas: <b>${esc(kf)}</b> | Jumlah Siswa: <b>${a.length}</b> | Jumlah Catatan: <b>${kej}</b> | Total Poin: <b>${total}</b></div>` + tbl + ttdHTML(kls);
+  $('pvTitle').textContent = 'Pratinjau Cetak ' + (lengkap ? 'Lengkap ' : 'Rekap ') + (nm[0] + nm.slice(1).toLowerCase());
+  $('pvSub').textContent = 'Klik Cetak Sekarang lalu pilih "Save as PDF".';
+  bootstrap.Modal.getOrCreateInstance($('mdlPreview')).show();
 }
 // -- Peringkat
 function mkPeringkat() {
