@@ -265,3 +265,14 @@ body { background: var(--bg); color: var(--text); }
 .pilih-row:last-child { border-bottom: 0; } .pilih-row:hover { background: rgba(37,99,235,.08); }
 .pilih-row.taken { opacity: .5; cursor: not-allowed; }
 .pilih-row small { display: block; font-size: .74rem; color: var(--muted); }
+/* Perbaikan header sidebar: logo tanpa latar, teks terbaca di mode terang & gelap */
+.brand-logo { width: auto; height: auto; border-radius: 0; background: none; box-shadow: none; }
+.sidebar-header .brand-logo img { width: 58px; height: 58px; filter: drop-shadow(0 3px 6px rgba(15,36,65,.35)); }
+.sidebar-header { background: linear-gradient(135deg, rgba(37,99,235,.09), rgba(37,99,235,0)); border-bottom: 1px solid var(--border); }
+.brand-kicker { color: #b45309; }
+.sidebar-header .brand-text b { color: #1e3a8a; }
+.sidebar-header .brand-text small { color: var(--muted); }
+[data-theme="dark"] .sidebar-header { background: linear-gradient(135deg, rgba(255,255,255,.10), rgba(255,255,255,.02)); border-bottom-color: rgba(255,255,255,.12); }
+[data-theme="dark"] .brand-kicker { color: #fbbf24; }
+[data-theme="dark"] .sidebar-header .brand-text b { color: #fff; }
+[data-theme="dark"] .sidebar-header .brand-text small { color: #cbd5e1; }
