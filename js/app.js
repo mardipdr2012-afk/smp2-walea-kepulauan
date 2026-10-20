@@ -105,8 +105,9 @@ function renderSiswa() {
     return `<tr><td class="text-muted">${i + 1}</td>
       <td><div class="d-flex align-items-center gap-3"><span class="sis-ava" data-nis="${nis}"><i class="bi bi-person-fill"></i></span><b>${esc(s.nama)}</b></div></td>
       <td><b>${nis}</b><div class="small text-muted">NISN: ${esc(s.nisn || '-')}</div></td>
-      <td><span class="chip">${esc(s.kelas)}</span> <span class="chip chip-${s.jk === 'P' ? 'p' : 'l'}">${esc(s.jk)}</span></td>
-      <td>${s.hp ? `<a class="wa-link" href="https://wa.me/${waNum(s.hp)}" target="_blank" rel="noopener"><i class="bi bi-whatsapp"></i> ${esc(s.hp)}</a>` : '<span class="text-muted">-</span>'}</td>
+      <td><span class="chip">${esc(s.kelas)}</span> <span class="chip chip-${s.jk === 'P' ? 'p' : 'l'}">${esc(s.jk)}</span>${waliDari(s.kelas) ? `<div class="small text-muted mt-1">Wali: ${esc(waliDari(s.kelas).nama)}</div>` : ''}</td>
+      <td>${s.hp ? `<a class="wa-link" href="https://wa.me/${waNum(s.hp)}" target="_blank" rel="noopener"><i class="bi bi-whatsapp"></i> ${esc(s.hp)}</a> <button class="ico-btn2 ms-1" style="width:30px;height:30px" data-act="wa" data-nis="${nis}" title="Ubah No. WA" aria-label="Ubah No. WA"><i class="bi bi-pencil"></i></button>`
+        : `<button class="btn btn-soft btn-sm" data-act="wa" data-nis="${nis}"><i class="bi bi-whatsapp text-success"></i> Isi No. WA</button>`}</td>
       <td><span class="st-pill ${on ? 'on' : 'off'}"><i class="bi bi-${on ? 'check-circle-fill' : 'dash-circle-fill'}"></i> ${on ? 'Aktif' : 'Nonaktif'}</span></td>
       <td class="text-end text-nowrap"><button class="btn btn-soft btn-sm" data-act="kartu" data-nis="${nis}"><i class="bi bi-person-vcard"></i> Kartu</button>
         <button class="ico-btn2" data-act="edit" data-nis="${nis}" title="Ubah data" aria-label="Ubah data"><i class="bi bi-pencil"></i></button>
@@ -140,6 +141,7 @@ $('siswaBody').addEventListener('click', e => {
   const s = siswa.find(x => x.nis === b.dataset.nis); if (!s) return;
   if (b.dataset.act === 'kartu') bukaKartu(s);
   if (b.dataset.act === 'edit') bukaForm(s);
+  if (b.dataset.act === 'wa') bukaWa(s);
   if (b.dataset.act === 'status') {
     const baru = isAktif(s) ? 'Nonaktif' : 'Aktif';
     api('ubahStatusSiswa', [{ nis: s.nis, status: baru }], r => { toast(r.message, r.success ? 'success' : 'danger'); if (r.success) loadSiswa(); });
@@ -172,7 +174,7 @@ function bukaForm(s) {
   }
   bootstrap.Modal.getOrCreateInstance($('mdlSiswa')).show();
 }
-function prosesFoto(f) {   // potong ke rasio 3x4, kecilkan, kompres agar muat di sel Sheets
+function prosesFoto(f, cb) {   // potong ke rasio 3x4, kecilkan, kompres agar muat di sel Sheets
   if (!f) return;
   const rd = new FileReader();
   rd.onload = ev => {
@@ -185,7 +187,7 @@ function prosesFoto(f) {   // potong ke rasio 3x4, kecilkan, kompres agar muat d
       c.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, W, H);
       let q = .75, d = c.toDataURL('image/jpeg', q);
       while (d.length > 44000 && q > .3) { q -= .1; d = c.toDataURL('image/jpeg', q); }
-      setFoto(d, 'ganti');
+      (cb || (x => setFoto(x, 'ganti')))(d);
     };
     img.src = ev.target.result;
   };
@@ -207,6 +209,24 @@ $('formSiswa').onsubmit = e => {
     if (r.success) { delete fotoCache[d.nis]; bootstrap.Modal.getInstance($('mdlSiswa')).hide(); loadSiswa(); }
   });
 };
+
+// -- Isi cepat No. WA orang tua / wali (langsung dari tabel)
+let waSiswa = null;
+function bukaWa(s) {
+  waSiswa = s; $('waNama').innerHTML = `<b>${esc(s.nama)}</b> &middot; Kelas ${esc(s.kelas)} &middot; NIS ${esc(s.nis)}`;
+  $('waInput').value = s.hp || ''; $('waErr').classList.add('d-none');
+  bootstrap.Modal.getOrCreateInstance($('mdlWa')).show();
+}
+function simpanWa() {
+  const s = waSiswa; if (!s) return;
+  const hp = $('waInput').value.trim().replace(/[^\d+]/g, '');
+  if (hp && !/^\+?\d{8,15}$/.test(hp)) return $('waErr').classList.remove('d-none');
+  $('waErr').classList.add('d-none');
+  api('ubahSiswa', [{ nis: s.nis, nisn: s.nisn, nama: s.nama, tempat: s.tempat, tglLahir: s.tglLahir, jk: s.jk, kelas: s.kelas, status: s.status, hp, fotoMode: 'keep' }], r => {
+    toast(r.message, r.success ? 'success' : 'danger');
+    if (r.success) { bootstrap.Modal.getInstance($('mdlWa')).hide(); loadSiswa(); }
+  });
+}
 
 // -- Kartu pelajar
 function kartuHTML(s, foto) {
@@ -271,6 +291,105 @@ $('btnCetakGo').onclick = () => {
 };
 function cetak(mode) {
   document.body.classList.add('print-' + mode); window.print(); document.body.classList.remove('print-' + mode);
+}
+
+// ===== DATA GURU (foto, jabatan, wali kelas, guru wali) =====
+let guru = [], guruEdit = null, gFotoB64 = '', gFotoMode = 'keep';
+const fotoGuru = {};                                                         // id -> dataURL ('' = tanpa foto)
+const isWali = g => g.waliKelas === 'Ya';
+const waliDari = k => guru.find(g => isWali(g) && String(g.kelasWali).toLowerCase() === String(k || '').toLowerCase());
+const chipsPeran = g => [isWali(g) ? `<span class="chip chip-wk">Wali Kelas ${esc(g.kelasWali)}</span>` : '', g.guruWali === 'Ya' ? '<span class="chip chip-gw">Guru Wali</span>' : ''].filter(Boolean).join(' ') || '<span class="text-muted">-</span>';
+
+function loadGuru(cb) {
+  api('getGuru', [], r => {
+    if (!r.success) return toast(r.message, 'danger');
+    guru = r.data; renderGuru(); renderSiswa(); muatFotoGuru(guru.map(g => g.id)); cb && cb();
+  }, false);
+}
+function renderGuru() {
+  $('btnTambahGuru').classList.toggle('d-none', !isAdmin());
+  $('gStTotal').textContent = guru.length; $('gStWk').textContent = guru.filter(isWali).length; $('gStGw').textContent = guru.filter(g => g.guruWali === 'Ya').length;
+  const q = ($('gCari').value || '').trim().toLowerCase(), pr = $('gPeran').value;
+  const a = guru.filter(g => (!q || (g.nama + ' ' + g.nip + ' ' + g.jabatan).toLowerCase().includes(q)) &&
+    (pr === 'Semua' || (pr === 'Wali Kelas' && isWali(g)) || (pr === 'Guru Wali' && g.guruWali === 'Ya') || (pr === 'Lainnya' && !isWali(g) && g.guruWali !== 'Ya')));
+  $('guruBody').innerHTML = a.length ? a.map((g, i) => {
+    const id = esc(g.id);
+    return `<tr><td class="text-muted">${i + 1}</td>
+      <td><div class="d-flex align-items-center gap-3"><span class="sis-ava" data-gid="${id}"><i class="bi bi-person-fill"></i></span><b>${esc(g.nama)}</b></div></td>
+      <td>${g.nip ? esc(g.nip) : '<span class="text-muted">-</span>'}</td>
+      <td>${g.jabatan ? esc(g.jabatan) : '<span class="text-muted">-</span>'}</td>
+      <td>${chipsPeran(g)}</td>
+      <td>${g.hp ? `<a class="wa-link" href="https://wa.me/${waNum(g.hp)}" target="_blank" rel="noopener"><i class="bi bi-whatsapp"></i> ${esc(g.hp)}</a>` : '<span class="text-muted">-</span>'}</td>
+      <td class="text-end text-nowrap">${isAdmin() ? `<button class="ico-btn2" data-act="edit" data-id="${id}" title="Ubah data" aria-label="Ubah data"><i class="bi bi-pencil"></i></button>
+        <button class="ico-btn2 del" data-act="hapus" data-id="${id}" title="Hapus" aria-label="Hapus"><i class="bi bi-trash3"></i></button>` : '<span class="text-muted">-</span>'}</td></tr>`;
+  }).join('') : '<tr><td colspan="7" class="text-center text-muted py-4">Belum ada data guru yang cocok.</td></tr>';
+  pasangFotoGuru();
+}
+function pasangFotoGuru() {
+  document.querySelectorAll('.sis-ava[data-gid]').forEach(el => {
+    const f = fotoGuru[el.dataset.gid];
+    if (f && !el.querySelector('img')) { const im = new Image(); im.alt = ''; im.src = f; el.textContent = ''; el.appendChild(im); }
+  });
+}
+function muatFotoGuru(ids) {
+  const perlu = ids.filter(n => !(n in fotoGuru)), chunks = [];
+  for (let i = 0; i < perlu.length; i += 8) chunks.push(perlu.slice(i, i + 8));
+  let i = 0;
+  (function next() {
+    if (i >= chunks.length) return;
+    const c = chunks[i++];
+    api('getFotoGuruBatch', [{ list: c }], r => {
+      c.forEach(n => { const f = r.success && r.data ? String(r.data[n] || '') : ''; fotoGuru[n] = f.startsWith('data:image/') ? f : ''; });
+      pasangFotoGuru(); next();
+    }, false);
+  })();
+}
+function setGFoto(src, mode) {
+  gFotoB64 = src || ''; gFotoMode = mode;
+  const box = $('gPrevBox'); box.textContent = '';
+  if (src) { const im = new Image(); im.alt = 'Foto guru'; im.src = src; box.appendChild(im); }
+  else box.innerHTML = '<i class="bi bi-person-bounding-box"></i><small>Foto</small>';
+}
+function bukaGuru(g) {
+  guruEdit = g ? g.id : null;
+  $('formGuru').reset(); $('formGuru').classList.remove('was-validated');
+  $('guruFormTitle').textContent = g ? 'Ubah Data Guru' : 'Tambah Guru Baru';
+  if (g) { $('gNama').value = g.nama; $('gNip').value = g.nip; $('gHp').value = g.hp; $('gJabatan').value = g.jabatan; $('gWali').value = g.waliKelas; $('gKelas').value = g.kelasWali; $('gGuruWali').value = g.guruWali; }
+  tglKelasWali(); setGFoto('', 'keep');
+  if (g) {
+    if (fotoGuru[g.id]) setGFoto(fotoGuru[g.id], 'keep');
+    else api('getFotoGuruBatch', [{ list: [g.id] }], r => {
+      const f = r.success && r.data ? String(r.data[g.id] || '') : ''; fotoGuru[g.id] = f.startsWith('data:image/') ? f : '';
+      if (guruEdit === g.id && gFotoMode === 'keep' && fotoGuru[g.id]) setGFoto(fotoGuru[g.id], 'keep');
+    }, false);
+  }
+  bootstrap.Modal.getOrCreateInstance($('mdlGuru')).show();
+}
+function tglKelasWali() { const on = $('gWali').value === 'Ya'; $('gKelasBox').classList.toggle('d-none', !on); $('gKelas').required = on; }
+function initGuru() {
+  $('gCari').oninput = renderGuru; $('gPeran').onchange = renderGuru; $('gWali').onchange = tglKelasWali;
+  $('btnTambahGuru').onclick = () => bukaGuru(null);
+  $('gBtnAmbil').onclick = () => $('gFotoCam').click(); $('gBtnPilih').onclick = () => $('gFotoFile').click();
+  $('gBtnHapusFoto').onclick = () => setGFoto('', guruEdit ? 'hapus' : 'keep');
+  ['gFotoCam', 'gFotoFile'].forEach(id => { $(id).onchange = e => { prosesFoto(e.target.files[0], d => setGFoto(d, 'ganti')); e.target.value = ''; }; });
+  $('guruBody').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    const g = guru.find(x => x.id === b.dataset.id); if (!g) return;
+    if (b.dataset.act === 'edit') bukaGuru(g);
+    if (b.dataset.act === 'hapus') { hapusFn = () => api('hapusGuru', [{ id: g.id }], r => { done(r); if (r.success) loadGuru(); }); $('hapusTeks').textContent = `Hapus data guru ${g.nama}?`; bootstrap.Modal.getOrCreateInstance($('mdlHapus')).show(); }
+  });
+  $('formGuru').onsubmit = e => {
+    e.preventDefault(); $('formGuru').classList.add('was-validated');
+    if (!$('formGuru').checkValidity()) return;
+    const d = { id: guruEdit || '', nama: $('gNama').value.trim(), nip: $('gNip').value.trim(), hp: $('gHp').value.trim(), jabatan: $('gJabatan').value.trim(),
+      waliKelas: $('gWali').value, kelasWali: $('gWali').value === 'Ya' ? $('gKelas').value.trim() : '', guruWali: $('gGuruWali').value };
+    if (guruEdit) { d.fotoMode = gFotoMode; if (gFotoMode === 'ganti') d.foto = gFotoB64; } else d.foto = gFotoMode === 'ganti' ? gFotoB64 : '';
+    api('simpanGuru', [d], r => {
+      toast(r.message, r.success ? 'success' : 'danger');
+      if (r.success) { if (guruEdit) delete fotoGuru[guruEdit]; bootstrap.Modal.getInstance($('mdlGuru')).hide(); loadGuru(); }
+    });
+  };
+  $('btnWaSimpan').onclick = simpanWa;
 }
 
 // ===== SCANNER =====
@@ -409,7 +528,8 @@ function kopHTML() {
 function ttdHTML(kelasList) {
   const tgl = (SEKOLAH.kota ? SEKOLAH.kota + ', ' : '') + new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
   const kepala = `<div class="lap-ttd"><div>Mengetahui,<br>Kepala ${esc(judulKapital(SEKOLAH.nama))}</div><div class="lap-sp"></div>${SEKOLAH.kepala ? `<div class="lap-nm">${esc(SEKOLAH.kepala)}</div>` : '<div class="lap-dots">&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;</div>'}<div>NIP. ${SEKOLAH.nipKepala ? esc(SEKOLAH.nipKepala) : '&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;'}</div></div>`;
-  const wali = kelasList.map(k => `<div class="lap-ttd"><div>${esc(tgl)}<br>Wali Kelas ${esc(k)}</div><div class="lap-sp"></div><div class="lap-dots">&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;</div><div>NIP. &hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;</div></div>`).join('');
+  const dots = '&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;';
+  const wali = kelasList.map(k => { const w = waliDari(k); return `<div class="lap-ttd"><div>${esc(tgl)}<br>Wali Kelas ${esc(k)}</div><div class="lap-sp"></div>${w ? `<div class="lap-nm">${esc(w.nama)}</div>` : `<div class="lap-dots">${dots}</div>`}<div>NIP. ${w && w.nip ? esc(w.nip) : '&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;'}</div></div>`; }).join('');
   return `<div class="lap-ttds">${kepala}${wali}</div>`;
 }
 function lapDoc(judul, tabel, kelasList, labelJml, jml) {
@@ -470,8 +590,6 @@ const NAV = [['dashboard','Dashboard','speedometer2'],['scan','Scan','qr-code-sc
   ['rekap','Rekap Presensi','table'],['pelanggaran','Pelanggaran','exclamation-triangle'],['rekapPel','Rekap Pelanggaran','file-earmark-text'],['prestasi','Prestasi Siswa','award'],
   ['rekapPres','Rekap Prestasi','bar-chart'],['peringkat','Peringkat','trophy'],['pengaturan','Pengaturan','gear',1]];
 const MOD = {
-  guru: { t: 'Data Guru', s: 'Data_Guru', c: [['NIP',1],['Nama',2],['Mata Pelajaran',3],['L/P',4]],
-    f: [['nip','NIP'],['nama','Nama Lengkap'],['mapel','Mata Pelajaran'],['jk','Jenis Kelamin','select',['L','P']]] },
   akun: { t: 'Kelola Akun', s: 'Akun', c: [['Username',1],['Nama',2],['Role',3]],
     f: [['username','Username'],['nama','Nama'],['role','Role','select',['guru','admin']],['password','Password (min. 6 karakter)','password']] },
   pelanggaran: { t: 'Pelanggaran', s: 'Pelanggaran', c: [['Tanggal',1],['Nama',3],['Kelas',4],['Pelanggaran',5],['Poin',6],['Ket.',7]],
@@ -479,7 +597,7 @@ const MOD = {
   prestasi: { t: 'Prestasi Siswa', s: 'Prestasi', c: [['Tanggal',1],['Nama',3],['Kelas',4],['Prestasi',5],['Poin',6],['Ket.',7]],
     f: [['tanggal','Tanggal','date'],['nis','Siswa','siswa'],['jenis','Prestasi'],['poin','Poin','number'],['ket','Keterangan']] }
 };
-const LOAD = { guru: () => loadMod('guru'), akun: () => loadMod('akun'), pelanggaran: () => loadMod('pelanggaran'), prestasi: () => loadMod('prestasi'),
+const LOAD = { guru: () => loadGuru(), akun: () => loadMod('akun'), pelanggaran: () => loadMod('pelanggaran'), prestasi: () => loadMod('prestasi'),
   rekapPel: () => loadRekapCatat('rekapPel', 'Pelanggaran'), rekapPres: () => loadRekapCatat('rekapPres', 'Prestasi'), peringkat: loadPeringkat, pengaturan: loadPeng };
 const today = () => new Date().toLocaleDateString('sv-SE');
 const empty = n => `<tr><td colspan="${n}" class="text-center text-muted">Belum ada data.</td></tr>`;
@@ -620,7 +738,7 @@ function buildNav() {
 }
 function start() {
   $('loginBox').style.display = 'none'; $('userInfo').innerHTML = `<div class="d-flex align-items-center gap-2"><span class="avatar">${esc(String(USER.nama).charAt(0).toUpperCase())}</span><div><b>${esc(USER.nama)}</b><br><small class="text-muted">${esc(USER.role)}</small></div></div>`;
-  buildNav(); loadSiswa(); navigateTo('dashboard');
+  buildNav(); loadGuru(); loadSiswa(); navigateTo('dashboard');
 }
 
 // ===== TAMPILAN =====
@@ -636,7 +754,7 @@ document.addEventListener('DOMContentLoaded', () => {
   $('themeSwitch').onchange = () => setTheme($('themeSwitch').checked ? 'dark' : 'light');
   $('btnMenu').onclick = $('btnMenu2').onclick = () => toggleSidebar();
   $('dashDate').onchange = loadDash; $('btnLogout').onclick = logout;
-  initRekap(); Object.keys(MOD).forEach(crud);
+  initRekap(); initGuru(); Object.keys(MOD).forEach(crud);
   rekapCatat('rekapPel', 'Pelanggaran', 'Rekap Pelanggaran'); rekapCatat('rekapPres', 'Prestasi', 'Rekap Prestasi'); mkPeringkat(); mkPengaturan();
   document.querySelector('.main-content').addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;

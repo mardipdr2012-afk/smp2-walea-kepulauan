@@ -232,3 +232,7 @@ body { background: var(--bg); color: var(--text); }
   body.print-laporan #printArea { display: block !important; }
   body.print-laporan .lap { box-shadow: none; padding: 0; max-width: none; }
 }
+
+/* ===== MODUL DATA GURU ===== */
+.sis-stat.wk b { color: #2a86ee; }
+.chip-wk { background: rgba(59,130,246,.16); color: #2f7fe0; } .chip-gw { background: rgba(34,197,94,.15); color: #15803d; }

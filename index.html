@@ -104,6 +104,31 @@
         <tbody id="siswaBody"></tbody></table></div></div>
     </section>
 
+    <!-- DATA GURU -->
+    <section id="section-guru" class="content-section sis-scope">
+      <div class="sis-card">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+          <div>
+            <div class="sis-title">Data Guru</div>
+            <div class="sis-sub">Kelola data guru, wali kelas, dan Guru Wali. Dipakai otomatis di Data Siswa dan tanda tangan laporan</div>
+          </div>
+          <button class="btn btn-sky d-none" id="btnTambahGuru"><i class="bi bi-person-plus-fill"></i> Tambah Guru</button>
+        </div>
+        <div class="row g-3 mt-1">
+          <div class="col-12 col-md-8"><label class="form-label" for="gCari">Cari Nama / NIP / Jabatan</label><input id="gCari" class="form-control" placeholder="Ketik nama, NIP, atau jabatan..." autocomplete="off"></div>
+          <div class="col-12 col-md-4"><label class="form-label" for="gPeran">Filter Peran</label><select id="gPeran" class="form-select"><option value="Semua">Semua</option><option value="Wali Kelas">Wali Kelas</option><option value="Guru Wali">Guru Wali</option><option value="Lainnya">Guru Lainnya</option></select></div>
+        </div>
+      </div>
+      <div class="sis-stats">
+        <div class="sis-stat">Total Guru<b id="gStTotal">0</b></div>
+        <div class="sis-stat wk">Wali Kelas<b id="gStWk">0</b></div>
+        <div class="sis-stat ok">Guru Wali<b id="gStGw">0</b></div>
+      </div>
+      <div class="sis-card p-0"><div class="table-responsive"><table class="table sis-table mb-0" style="min-width:760px">
+        <thead><tr><th>No</th><th>Foto &amp; Nama Guru</th><th>NIP</th><th>Jabatan</th><th>Peran</th><th>Kontak (WhatsApp)</th><th class="text-end">Aksi</th></tr></thead>
+        <tbody id="guruBody"></tbody></table></div></div>
+    </section>
+
     <!-- SCAN -->
     <section id="section-scan" class="content-section">
       <h3 class="fw-bold mb-1">Scan Absen</h3>
@@ -196,6 +221,47 @@
         <div class="col-12"><label class="form-label" for="fStatus">Status</label><select id="fStatus" class="form-select"><option value="Aktif">Aktif</option><option value="Nonaktif">Nonaktif</option></select></div>
       </div>
     </div><div class="modal-footer"><button type="button" class="btn btn-soft" data-bs-dismiss="modal">Batal</button><button type="submit" class="btn btn-sky"><i class="bi bi-check2-circle"></i> Simpan</button></div></form>
+  </div></div></div>
+
+  <!-- Modal Tambah / Ubah Guru -->
+  <div class="modal fade" id="mdlGuru" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-fullscreen-sm-down"><div class="modal-content sis-scope">
+    <div class="modal-header"><h5 class="modal-title fw-bold" id="guruFormTitle">Tambah Guru Baru</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button></div>
+    <form id="formGuru" novalidate><div class="modal-body">
+      <label class="form-label">Foto Guru (Rasio 3&times;4)</label>
+      <div class="foto-box">
+        <div class="foto-prev" id="gPrevBox"><i class="bi bi-person-bounding-box"></i><small>Foto</small></div>
+        <div>
+          <div class="d-flex gap-2 flex-wrap">
+            <button type="button" class="btn btn-sky" id="gBtnAmbil"><i class="bi bi-camera-fill"></i> Ambil Foto</button>
+            <button type="button" class="btn btn-soft" id="gBtnPilih"><i class="bi bi-upload"></i> Pilih Berkas</button>
+            <button type="button" class="btn btn-soft text-danger" id="gBtnHapusFoto"><i class="bi bi-trash3"></i> Hapus</button>
+          </div>
+        </div>
+      </div>
+      <input type="file" id="gFotoCam" accept="image/*" capture="user" class="d-none"><input type="file" id="gFotoFile" accept="image/*" class="d-none">
+      <div class="row g-3">
+        <div class="col-12"><label class="form-label" for="gNama">Nama Lengkap &amp; Gelar <span class="text-danger">*</span></label><input id="gNama" class="form-control" placeholder="Contoh: Nurul Hidayati, S.Pd" required></div>
+        <div class="col-12 col-sm-6"><label class="form-label" for="gNip">NIP</label><input id="gNip" class="form-control" placeholder="Contoh: 199104152020121001" inputmode="numeric" pattern="[0-9 ]{5,30}"></div>
+        <div class="col-12 col-sm-6"><label class="form-label" for="gHp">Nomor HP / WhatsApp</label><input id="gHp" class="form-control" placeholder="Contoh: 081234567890" inputmode="tel" pattern="[0-9+ \-]{8,20}"></div>
+        <div class="col-12"><label class="form-label" for="gJabatan">Jabatan</label><input id="gJabatan" class="form-control" placeholder="Contoh: Guru Mata Pelajaran" maxlength="100"></div>
+        <div class="col-12 col-sm-6"><label class="form-label" for="gWali">Wali Kelas?</label><select id="gWali" class="form-select"><option value="Tidak">Tidak</option><option value="Ya">Ya</option></select></div>
+        <div class="col-12 col-sm-6 d-none" id="gKelasBox"><label class="form-label" for="gKelas">Kelas yang Diampu <span class="text-danger">*</span></label><input id="gKelas" class="form-control" placeholder="Contoh: 8B" list="dlKelas" maxlength="20"></div>
+        <div class="col-12"><label class="form-label" for="gGuruWali">Guru Wali?</label><select id="gGuruWali" class="form-select"><option value="Tidak">Tidak</option><option value="Ya">Ya</option></select></div>
+      </div>
+    </div><div class="modal-footer"><button type="button" class="btn btn-soft" data-bs-dismiss="modal">Batal</button><button type="submit" class="btn btn-sky"><i class="bi bi-check2"></i> Simpan Guru</button></div></form>
+  </div></div></div>
+
+  <!-- Modal Isi Cepat No. WA Orang Tua -->
+  <div class="modal fade" id="mdlWa" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content sis-scope">
+    <div class="modal-header"><h5 class="modal-title fw-bold">No. WhatsApp Orang Tua / Wali</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button></div>
+    <div class="modal-body">
+      <div class="small text-muted mb-3" id="waNama"></div>
+      <label class="form-label" for="waInput">No. HP / WhatsApp Orang Tua / Wali</label>
+      <div class="input-group"><span class="input-group-text"><i class="bi bi-whatsapp text-success"></i></span><input id="waInput" class="form-control" placeholder="Contoh: 081234567890" inputmode="tel" autocomplete="off"></div>
+      <div class="text-danger small mt-1 d-none" id="waErr">Nomor tidak valid. Gunakan 8-15 digit angka.</div>
+      <small class="text-muted d-block mt-2">Dipakai untuk mengirim rekap presensi dan kartu pelajar lewat WhatsApp. Kosongkan lalu simpan untuk menghapus nomor.</small>
+    </div>
+    <div class="modal-footer"><button type="button" class="btn btn-soft" data-bs-dismiss="modal">Batal</button><button type="button" class="btn btn-wa" id="btnWaSimpan"><i class="bi bi-check2-circle"></i> Simpan Nomor</button></div>
   </div></div></div>
 
   <!-- Modal Kartu Pelajar -->
