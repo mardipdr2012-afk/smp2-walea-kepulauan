@@ -302,7 +302,7 @@ const chipsPeran = g => [isWali(g) ? `<span class="chip chip-wk">Wali Kelas ${es
 
 function loadGuru(cb) {
   api('getGuru', [], r => {
-    if (!r.success) return toast(r.message, 'danger');
+    if (!r.success) return toast(/Action tidak dikenal/.test(r.message) ? 'Backend belum diperbarui. Tempel Kode.gs terbaru di Apps Script, lalu Deploy > Manage deployments > Edit > New version.' : r.message, 'danger');
     guru = r.data; renderGuru(); renderSiswa(); muatFotoGuru(guru.map(g => g.id)); cb && cb();
   }, false);
 }
