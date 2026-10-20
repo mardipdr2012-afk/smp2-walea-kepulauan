@@ -128,7 +128,7 @@ function renderSiswa() {
     return `<tr><td class="text-muted">${i + 1}</td>
       <td><div class="d-flex align-items-center gap-3"><span class="sis-ava" data-nis="${nis}"><i class="bi bi-person-fill"></i></span><b>${esc(s.nama)}</b></div></td>
       <td><b>${nis}</b><div class="small text-muted">NISN: ${esc(s.nisn || '-')}</div></td>
-      <td><span class="chip">${esc(s.kelas)}</span> <span class="chip chip-${s.jk === 'P' ? 'p' : 'l'}">${esc(s.jk)}</span>${waliDari(s.kelas) ? `<div class="small text-muted mt-1">Wali: ${esc(waliDari(s.kelas).nama)}</div>` : ''}</td>
+      <td><span class="chip">${esc(s.kelas)}</span> <span class="chip chip-${s.jk === 'P' ? 'p' : 'l'}">${esc(s.jk)}</span>${waliDari(s.kelas) ? `<div class="small text-muted mt-1">Wali: ${esc(waliDari(s.kelas).nama)}</div>` : ''}${guruWaliDari(s.nis) ? `<div class="small text-muted">Guru Wali: ${esc(guruWaliDari(s.nis).nama)}</div>` : ''}</td>
       <td>${s.hp ? `<a class="wa-link" href="https://wa.me/${waNum(s.hp)}" target="_blank" rel="noopener"><i class="bi bi-whatsapp"></i> ${esc(s.hp)}</a> <button class="ico-btn2 ms-1" style="width:30px;height:30px" data-act="wa" data-nis="${nis}" title="Ubah No. WA" aria-label="Ubah No. WA"><i class="bi bi-pencil"></i></button>`
         : `<button class="btn btn-soft btn-sm" data-act="wa" data-nis="${nis}"><i class="bi bi-whatsapp text-success"></i> Isi No. WA</button>`}</td>
       <td><span class="st-pill ${on ? 'on' : 'off'}"><i class="bi bi-${on ? 'check-circle-fill' : 'dash-circle-fill'}"></i> ${on ? 'Aktif' : 'Nonaktif'}</span></td>
@@ -340,8 +340,9 @@ function cetak(mode) {
 let guru = [], guruEdit = null, gFotoB64 = '', gFotoMode = 'keep';
 const fotoGuru = {};                                                         // id -> dataURL ('' = tanpa foto)
 const isWali = g => g.waliKelas === 'Ya';
+const guruWaliDari = nis => guru.find(g => g.guruWali === 'Ya' && (g.siswaWali || []).includes(String(nis)));
 const waliDari = k => guru.find(g => isWali(g) && String(g.kelasWali).toLowerCase() === String(k || '').toLowerCase());
-const chipsPeran = g => [isWali(g) ? `<span class="chip chip-wk">Wali Kelas ${esc(g.kelasWali)}</span>` : '', g.guruWali === 'Ya' ? '<span class="chip chip-gw">Guru Wali</span>' : ''].filter(Boolean).join(' ') || '<span class="text-muted">-</span>';
+const chipsPeran = g => [isWali(g) ? `<span class="chip chip-wk">Wali Kelas ${esc(g.kelasWali)}</span>` : '', g.guruWali === 'Ya' ? '<span class="chip chip-gw">Guru Wali' + ((g.siswaWali || []).length ? ' · ' + g.siswaWali.length + ' siswa' : '') + '</span>' : ''].filter(Boolean).join(' ') || '<span class="text-muted">-</span>';
 
 function loadGuru(cb) {
   swr('getGuru', [], 'guru', r => {
@@ -398,7 +399,7 @@ function bukaGuru(g) {
   $('formGuru').reset(); $('formGuru').classList.remove('was-validated');
   $('guruFormTitle').textContent = g ? 'Ubah Data Guru' : 'Tambah Guru Baru';
   if (g) { $('gNama').value = g.nama; $('gNip').value = g.nip; $('gHp').value = g.hp; $('gJabatan').value = g.jabatan; $('gWali').value = g.waliKelas; $('gKelas').value = g.kelasWali; $('gGuruWali').value = g.guruWali; }
-  tglKelasWali(); setGFoto('', 'keep');
+  gSel = new Set(g ? (g.siswaWali || []) : []); $('gSiswaCari').value = ''; tglKelasWali(); tglGuruWali(); setGFoto('', 'keep');
   if (g) {
     if (fotoGuru[g.id]) setGFoto(fotoGuru[g.id], 'keep');
     else api('getFotoGuruBatch', [{ list: [g.id] }], r => {
@@ -409,7 +410,30 @@ function bukaGuru(g) {
   bootstrap.Modal.getOrCreateInstance($('mdlGuru')).show();
 }
 function tglKelasWali() { const on = $('gWali').value === 'Ya'; $('gKelasBox').classList.toggle('d-none', !on); $('gKelas').required = on; }
+let gSel = new Set();
+function tglGuruWali() {
+  const on = $('gGuruWali').value === 'Ya'; $('gSiswaBox').classList.toggle('d-none', !on);
+  if (!on) return;
+  const ks = [...new Set(siswa.filter(isAktif).map(s => s.kelas))].sort(urutKelas);
+  $('gSiswaKelas').innerHTML = '<option value="Semua">Semua Kelas</option>' + ks.map(k => `<option>${esc(k)}</option>`).join('');
+  renderPilihSiswa();
+}
+function renderPilihSiswa() {
+  const q = ($('gSiswaCari').value || '').trim().toLowerCase(), k = $('gSiswaKelas').value, ambil = {};
+  guru.forEach(g => { if (g.id !== guruEdit && g.guruWali === 'Ya') (g.siswaWali || []).forEach(n => { ambil[n] = g.nama; }); });
+  const a = siswa.filter(s => (isAktif(s) || gSel.has(s.nis)) && (k === 'Semua' || s.kelas === k) && (!q || (s.nama + ' ' + s.nis).toLowerCase().includes(q)));
+  $('gSiswaList').innerHTML = a.length ? a.map(s => { const x = ambil[s.nis];
+    return `<label class="pilih-row${x ? ' taken' : ''}"><input type="checkbox" class="form-check-input mt-0" value="${esc(s.nis)}" ${gSel.has(s.nis) ? 'checked' : ''} ${x ? 'disabled' : ''}><span><b>${esc(s.nama)}</b><small>${esc(s.kelas)} &middot; NIS ${esc(s.nis)}${x ? ' &middot; sudah diwalikan ' + esc(x) : ''}</small></span></label>`; }).join('')
+    : '<div class="text-muted small p-3">Tidak ada siswa yang cocok.</div>';
+  $('gSiswaCount').textContent = gSel.size + ' siswa dipilih';
+}
 function initGuru() {
+  $('gGuruWali').onchange = tglGuruWali; $('gSiswaCari').oninput = renderPilihSiswa; $('gSiswaKelas').onchange = renderPilihSiswa;
+  $('gSiswaList').onchange = e => { const c = e.target; if (c.type !== 'checkbox') return; c.checked ? gSel.add(c.value) : gSel.delete(c.value); $('gSiswaCount').textContent = gSel.size + ' siswa dipilih'; };
+  $('gSiswaSemua').onclick = () => {
+    const cb = [...$('gSiswaList').querySelectorAll('input:not(:disabled)')], semua = cb.length && cb.every(c => c.checked);
+    cb.forEach(c => { c.checked = !semua; semua ? gSel.delete(c.value) : gSel.add(c.value); }); $('gSiswaCount').textContent = gSel.size + ' siswa dipilih';
+  };
   $('gCari').oninput = renderGuru; $('gPeran').onchange = renderGuru; $('gWali').onchange = tglKelasWali;
   $('btnTambahGuru').onclick = () => bukaGuru(null);
   $('gBtnAmbil').onclick = () => $('gFotoCam').click(); $('gBtnPilih').onclick = () => $('gFotoFile').click();
@@ -424,8 +448,9 @@ function initGuru() {
   $('formGuru').onsubmit = e => {
     e.preventDefault(); $('formGuru').classList.add('was-validated');
     if (!$('formGuru').checkValidity()) return;
+    if ($('gGuruWali').value === 'Ya' && !gSel.size) return toast('Guru Wali wajib memilih minimal satu siswa yang diwalikan.', 'warning');
     const d = { id: guruEdit || '', nama: $('gNama').value.trim(), nip: $('gNip').value.trim(), hp: $('gHp').value.trim(), jabatan: $('gJabatan').value.trim(),
-      waliKelas: $('gWali').value, kelasWali: $('gWali').value === 'Ya' ? $('gKelas').value.trim() : '', guruWali: $('gGuruWali').value };
+      waliKelas: $('gWali').value, kelasWali: $('gWali').value === 'Ya' ? $('gKelas').value.trim() : '', guruWali: $('gGuruWali').value, siswaWali: $('gGuruWali').value === 'Ya' ? [...gSel] : [] };
     if (guruEdit) { d.fotoMode = gFotoMode; if (gFotoMode === 'ganti') d.foto = gFotoB64; } else d.foto = gFotoMode === 'ganti' ? gFotoB64 : '';
     api('simpanGuru', [d], r => {
       toast(r.message, r.success ? 'success' : 'danger');
