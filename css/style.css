@@ -236,3 +236,9 @@ body { background: var(--bg); color: var(--text); }
 /* ===== MODUL DATA GURU ===== */
 .sis-stat.wk b { color: #2a86ee; }
 .chip-wk { background: rgba(59,130,246,.16); color: #2f7fe0; } .chip-gw { background: rgba(34,197,94,.15); color: #15803d; }
+
+/* ===== PERBAIKAN: form di dalam modal harus bisa digulir (form berada di antara .modal-content dan .modal-body) ===== */
+.modal-content > form { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+.modal-content > form > .modal-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+.modal-content > form > .modal-footer { flex: 0 0 auto; }
+.modal-dialog-scrollable .modal-content { max-height: 100%; }
