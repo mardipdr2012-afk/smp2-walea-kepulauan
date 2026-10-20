@@ -5,6 +5,29 @@ let siswa = [], qr = null, scanBusy = false, chart = null, fotoB64 = '', hapusNi
 const BLN = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
 
 function spin(on) { spinN = Math.max(0, spinN + (on ? 1 : -1)); $('loader').style.display = spinN ? 'flex' : 'none'; }
+let barN = 0, noNet = false;
+function bar(on) { barN = Math.max(0, barN + (on ? 1 : -1)); const b = $('topbar'); if (b) b.classList.toggle('on', barN > 0); }
+// Cache sesi (hilang saat tab ditutup / logout) + stale-while-revalidate: tampil instan dari cache, segarkan di latar belakang
+const SC = {
+  get(k) { try { return JSON.parse(sessionStorage.getItem('c_' + k)); } catch (e) { return null; } },
+  set(k, d) { try { sessionStorage.setItem('c_' + k, JSON.stringify({ t: Date.now(), d })); } catch (e) {} },
+  clear() { Object.keys(sessionStorage).filter(k => k.startsWith('c_')).forEach(k => sessionStorage.removeItem(k)); }
+};
+function swr(fn, args, key, render) {
+  const nc = key === 'list_Akun', c = nc ? null : SC.get(key), raw = c ? JSON.stringify(c.d) : null;
+  if (c) { render({ success: true, data: c.d, message: 'OK' }); if (noNet || Date.now() - c.t < 20000) return; }
+  api(fn, args, r => {
+    if (r.success) { if (raw && JSON.stringify(r.data) === raw) { SC.set(key, r.data); return; } if (!nc) SC.set(key, r.data); }
+    else if (c) return;
+    render(r);
+  }, false);
+}
+// Foto siswa: disimpan di IndexedDB selama sesi login (dihapus saat logout)
+const IDB = new Promise(res => { try { const q = indexedDB.open('absen-foto', 1); q.onupgradeneeded = () => q.result.createObjectStore('f'); q.onsuccess = () => res(q.result); q.onerror = () => res(null); } catch (e) { res(null); } });
+function idbMany(keys) { return IDB.then(db => !db || !keys.length ? {} : new Promise(res => { const out = {}, tx = db.transaction('f'), st = tx.objectStore('f'); keys.forEach(k => { st.get(k).onsuccess = e => { const v = e.target.result; if (v && Date.now() - v.t < 43200000) out[k] = v.d; }; }); tx.oncomplete = tx.onerror = tx.onabort = () => res(out); })); }
+function idbPut(o) { IDB.then(db => { if (!db) return; const st = db.transaction('f', 'readwrite').objectStore('f'); Object.keys(o).forEach(k => st.put({ t: Date.now(), d: o[k] }, k)); }); }
+function idbDel(k) { IDB.then(db => { if (db) db.transaction('f', 'readwrite').objectStore('f').delete(k); }); }
+function idbClear() { IDB.then(db => { if (db) db.transaction('f', 'readwrite').objectStore('f').clear(); }); }
 function toast(msg, type = 'primary') {
   $('toast').className = 'toast align-items-center border-0 text-bg-' + type;
   $('toastMsg').textContent = msg;
@@ -17,11 +40,11 @@ const ARG_MAP = {
 /** Semua panggilan server lewat fetch ke GAS (POST text/plain agar tidak kena CORS preflight) */
 function api(fn, args, ok, loader = true, fail) {
   if (!GAS_URL || GAS_URL.includes('PASTE')) return toast('GAS_URL belum diisi di js/config.js', 'danger');
-  if (loader) spin(1);
+  bar(1); if (loader) spin(1);
   fetch(GAS_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: fn, token: TOKEN, data: (ARG_MAP[fn] || (a => a[0] || {}))(args) }) })
     .then(r => r.json())
-    .then(r => { if (loader) spin(0); if (r && r.code === 'AUTH') return logout(); ok && ok(r); },
-          e => { if (loader) spin(0); scanBusy = false; toast('Gagal terhubung ke server: ' + ((e && e.message) || e), 'danger'); fail && fail(e); });
+    .then(r => { bar(0); if (loader) spin(0); if (r && r.code === 'AUTH') return logout(); if (r && r.success && !/^get/.test(fn) && fn !== 'login') SC.clear(); ok && ok(r); },
+          e => { bar(0); if (loader) spin(0); scanBusy = false; toast('Gagal terhubung ke server: ' + ((e && e.message) || e), 'danger'); fail && fail(e); });
 }
 const badge = s => ({ Hadir: 'success', Terlambat: 'warning', Alpa: 'danger' }[s] || 'info');
 
@@ -54,7 +77,7 @@ function loadDash() {
   $('greet').textContent = salam() + (USER ? ', ' + String(USER.nama).split(' ')[0] : '') + ' 👋';
   if (!$('dashDate').value) $('dashDate').value = new Date().toLocaleDateString('sv-SE');
   setDateText();
-  api('getDashboardData', [$('dashDate').value], r => {
+  swr('getDashboardData', [$('dashDate').value], 'dash_' + $('dashDate').value, r => {
     if (!r.success) return toast(r.message, 'danger');
     const x = r.data;
     const t = x.total || 1;
@@ -67,7 +90,7 @@ function loadDash() {
     chart = new Chart($('chartStatus'), { type: 'doughnut',
       data: { labels: ['Tepat Waktu', 'Terlambat', 'Izin/Sakit', 'Alpa', 'Belum Absen'],
         datasets: [{ data: [x.hadir - x.terlambat, x.terlambat, x.izin, x.alpa, x.belum], backgroundColor: ['#123a78', '#3f6cb3', '#7fa1d3', '#b7cbe8', '#e1e9f5'], borderWidth: 0 }] },
-      options: { plugins: { legend: { position: 'bottom', labels: { color: getComputedStyle(document.body).color } } } } });
+      options: { animation: false, plugins: { legend: { position: 'bottom', labels: { color: getComputedStyle(document.body).color } } } } });
     $('recent').innerHTML = x.recent.length ? x.recent.map(r => `<div class="tl-item"><time>${esc(String(r.waktu).slice(0, 5))}</time><span class="dot"></span><div class="tl-pill"><b>${esc(r.nama)}</b><small>${esc(r.kelas)} · ${esc(r.jenis)}</small><span class="badge text-bg-${badge(r.status)}">${esc(r.status)}</span></div></div>`).join('')
       : '<p class="text-muted small">Belum ada absen pada tanggal ini.</p>';
   });
@@ -82,7 +105,7 @@ const waNum = h => { let d = String(h || '').replace(/\D/g, ''); if (d.startsWit
 const fmtTgl = iso => new Date(iso + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
 
 function loadSiswa(cb) {
-  api('getSiswa', [], r => {
+  swr('getSiswa', [], 'siswa', r => {
     if (!r.success) return toast(r.message, 'danger');
     siswa = r.data;
     $('mNis').innerHTML = '<option value="">-- Pilih Siswa --</option>' + siswa.filter(isAktif).map(s => `<option value="${esc(s.nis)}">${esc(s.nis)} - ${esc(s.nama)}</option>`).join('');
@@ -90,7 +113,7 @@ function loadSiswa(cb) {
     const opt = '<option value="Semua">Semua Kelas</option>' + kls.map(k => `<option>${esc(k)}</option>`).join('');
     ['fKelas', 'sKelas'].forEach(id => { const cur = $(id).value; $(id).innerHTML = opt; if ([...$(id).options].some(o => o.value === cur)) $(id).value = cur; });
     $('dlKelas').innerHTML = kls.map(k => `<option value="${esc(k)}">`).join('');
-    renderSiswa(); muatFoto(siswa.map(s => s.nis));
+    renderSiswa();
     if ($('section-rekap').classList.contains('active') && rk.rows.length) { hitungRekap(); renderRekap(); }
     cb && cb();
   });
@@ -115,6 +138,8 @@ function renderSiswa() {
         ${isAdmin() ? `<button class="ico-btn2 del" data-act="hapus" data-nis="${nis}" title="Hapus" aria-label="Hapus"><i class="bi bi-trash3"></i></button>` : ''}</td></tr>`;
   }).join('') : '<tr><td colspan="7" class="text-center text-muted py-4">Tidak ada data siswa.</td></tr>';
   pasangFoto();
+  document.querySelectorAll('.sis-ava[data-nis]').forEach(el => { if (!(el.dataset.nis in fotoCache) && fotoIO) fotoIO.observe(el); });
+  if (!fotoIO) muatFoto([...document.querySelectorAll('.sis-ava[data-nis]')].slice(0, 60).map(e => e.dataset.nis));
 }
 // -- Foto: dimuat bertahap (8 siswa per panggilan) lalu disimpan di memori
 function pasangFoto() {
@@ -123,18 +148,35 @@ function pasangFoto() {
     if (f && !el.querySelector('img')) { const im = new Image(); im.alt = ''; im.src = f; el.textContent = ''; el.appendChild(im); }
   });
 }
+// Foto dimuat malas: hanya baris yang terlihat, 20 per panggilan, 3 panggilan paralel, cache IndexedDB
+const fotoQ = new Set(); let fotoT = null;
+const fotoIO = 'IntersectionObserver' in window ? new IntersectionObserver(es => {
+  es.forEach(e => { if (!e.isIntersecting) return; fotoIO.unobserve(e.target); const n = e.target.dataset.nis; if (n && !(n in fotoCache)) fotoQ.add(n); });
+  if (fotoQ.size) { clearTimeout(fotoT); fotoT = setTimeout(() => { const l = [...fotoQ]; fotoQ.clear(); muatFoto(l); }, 120); }
+}, { rootMargin: '300px' }) : null;
 function muatFoto(list, cb) {
-  const perlu = list.filter(n => !(n in fotoCache)), chunks = [];
-  for (let i = 0; i < perlu.length; i += 8) chunks.push(perlu.slice(i, i + 8));
-  let i = 0;
-  (function next() {
-    if (i >= chunks.length) return cb && cb();
-    const c = chunks[i++];
-    api('getFotoBatch', [{ list: c }], r => {
-      c.forEach(n => { const f = r.success && r.data ? String(r.data[n] || '') : ''; fotoCache[n] = f.startsWith('data:image/') ? f : ''; });
-      pasangFoto(); next();
-    }, false, () => cb && cb());
-  })();
+  const perlu = list.filter(n => !(n in fotoCache));
+  idbMany(perlu).then(hit => {
+    Object.keys(hit).forEach(n => { fotoCache[n] = hit[n]; });
+    const sisa = perlu.filter(n => !(n in fotoCache)), chunks = [];
+    for (let i = 0; i < sisa.length; i += 20) chunks.push(sisa.slice(i, i + 20));
+    pasangFoto();
+    if (!chunks.length) return cb && cb();
+    let idx = 0, aktif = 0, selesai = false;
+    const fin = () => { if (!selesai && idx >= chunks.length && !aktif) { selesai = true; cb && cb(); } };
+    const pump = () => {
+      while (aktif < 3 && idx < chunks.length) {
+        const c = chunks[idx++]; aktif++;
+        api('getFotoBatch', [{ list: c }], r => {
+          const put = {};
+          c.forEach(n => { const f = r.success && r.data ? String(r.data[n] || '') : ''; fotoCache[n] = f.startsWith('data:image/') ? f : ''; put[n] = fotoCache[n]; });
+          if (r.success) idbPut(put);
+          aktif--; pasangFoto(); pump(); fin();
+        }, false, () => { aktif--; pump(); fin(); });
+      }
+    };
+    pump();
+  });
 }
 $('siswaBody').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
@@ -143,10 +185,11 @@ $('siswaBody').addEventListener('click', e => {
   if (b.dataset.act === 'edit') bukaForm(s);
   if (b.dataset.act === 'wa') bukaWa(s);
   if (b.dataset.act === 'status') {
-    const baru = isAktif(s) ? 'Nonaktif' : 'Aktif';
-    api('ubahStatusSiswa', [{ nis: s.nis, status: baru }], r => { toast(r.message, r.success ? 'success' : 'danger'); if (r.success) loadSiswa(); });
+    const baru = isAktif(s) ? 'Nonaktif' : 'Aktif', lama = s.status;
+    s.status = baru; renderSiswa(); toast('Status siswa diubah menjadi ' + baru + '.', 'success');   // instan, sinkron di latar belakang
+    api('ubahStatusSiswa', [{ nis: s.nis, status: baru }], r => { if (!r.success) { s.status = lama; renderSiswa(); toast(r.message, 'danger'); } }, false, () => { s.status = lama; renderSiswa(); });
   }
-  if (b.dataset.act === 'hapus') { hapusFn = () => api('hapusSiswa', [s.nis], r => { done(r); if (r.success) loadSiswa(); }); $('hapusTeks').textContent = `Hapus siswa ${s.nama} (NIS ${s.nis})?`; bootstrap.Modal.getOrCreateInstance($('mdlHapus')).show(); }
+  if (b.dataset.act === 'hapus') { hapusFn = () => { const bak = siswa.slice(); siswa = siswa.filter(x => x.nis !== s.nis); bootstrap.Modal.getInstance($('mdlHapus')).hide(); renderSiswa(); toast('Data siswa dihapus.', 'success'); api('hapusSiswa', [s.nis], r => { if (!r.success) { siswa = bak; renderSiswa(); toast(r.message, 'danger'); } }, false, () => { siswa = bak; renderSiswa(); }); }; $('hapusTeks').textContent = `Hapus siswa ${s.nama} (NIS ${s.nis})?`; bootstrap.Modal.getOrCreateInstance($('mdlHapus')).show(); }
 });
 function done(r) { bootstrap.Modal.getInstance($('mdlHapus')).hide(); toast(r.message, r.success ? 'success' : 'danger'); }
 $('btnHapusOk').onclick = () => hapusFn && hapusFn();
@@ -206,7 +249,7 @@ $('formSiswa').onsubmit = e => {
   if (sisEdit) { d.fotoMode = fotoMode; if (fotoMode === 'ganti') d.foto = fotoB64; } else d.foto = fotoMode === 'ganti' ? fotoB64 : '';
   api(sisEdit ? 'ubahSiswa' : 'simpanSiswa', [d], r => {
     toast(r.message, r.success ? 'success' : 'danger');
-    if (r.success) { delete fotoCache[d.nis]; bootstrap.Modal.getInstance($('mdlSiswa')).hide(); loadSiswa(); }
+    if (r.success) { delete fotoCache[d.nis]; idbDel(d.nis); bootstrap.Modal.getInstance($('mdlSiswa')).hide(); loadSiswa(); }
   });
 };
 
@@ -301,7 +344,7 @@ const waliDari = k => guru.find(g => isWali(g) && String(g.kelasWali).toLowerCas
 const chipsPeran = g => [isWali(g) ? `<span class="chip chip-wk">Wali Kelas ${esc(g.kelasWali)}</span>` : '', g.guruWali === 'Ya' ? '<span class="chip chip-gw">Guru Wali</span>' : ''].filter(Boolean).join(' ') || '<span class="text-muted">-</span>';
 
 function loadGuru(cb) {
-  api('getGuru', [], r => {
+  swr('getGuru', [], 'guru', r => {
     if (!r.success) { renderGuru(); return toast(/Action tidak dikenal/.test(r.message) ? 'Backend belum diperbarui. Tempel Kode.gs terbaru di Apps Script, lalu Deploy > Manage deployments > Edit > New version.' : r.message, 'danger'); }
     guru = r.data; renderGuru(); renderSiswa(); muatFotoGuru(guru.map(g => g.id)); cb && cb();
   }, false);
@@ -407,16 +450,24 @@ function startScan() {
 function stopScan() { camUI(false); return qr && qr.isScanning ? qr.stop().catch(() => {}) : Promise.resolve(); }
 function hasil(html, cls = '') { $('scanResult').className = 'card p-3 text-center ' + cls; $('scanResult').innerHTML = html; }
 function resetHasil() { scanBusy = false; hasil('Menunggu scan...', 'text-muted'); }
+const sudahScan = new Set();
 function onScan(text) {
   if (scanBusy) return; scanBusy = true;
   const jenis = $('jenis').value, ket = jenis === 'Mata Pelajaran' ? $('mapel').value.trim() : '';
   if (jenis === 'Mata Pelajaran' && !ket) { toast('Harap isi nama mata pelajaran!', 'danger'); scanBusy = false; return; }
-  hasil('Memproses NIS: ' + esc(text) + '...');
+  const nis = String(text).trim(), s = siswa.find(x => x.nis === nis), gagal = m => { hasil(`<h4 class="text-danger">❌ Gagal</h4>${esc(m)}`); toast(m, 'danger'); setTimeout(resetHasil, 1800); };
+  if (siswa.length && !s) return gagal('QR Code tidak dikenali (NIS: ' + nis + ')');          // dicek lokal, tanpa menunggu server
+  if (s && s.status === 'Nonaktif') return gagal('Siswa ' + s.nama + ' berstatus Nonaktif.');
+  const kunci = today() + '|' + jenis + '|' + nis + '|' + ket;
+  if (sudahScan.has(kunci)) return gagal((s ? s.nama : nis) + ' sudah diabsen (' + jenis + ') hari ini.');
+  sudahScan.add(kunci);
+  hasil(`<h4 class="text-primary">⏳ Menyimpan...</h4><b>${esc(s ? s.nama : nis)}</b>${s ? ' (' + esc(s.kelas) + ')' : ''}`);
+  setTimeout(() => { scanBusy = false; }, 1200);   // siap memindai siswa berikutnya tanpa menunggu server
   api('simpanAbsensi', [text, 'Hadir', ket, jenis], r => {
     if (r.success) { hasil(`<h4 class="text-success">✅ Berhasil</h4><b>${esc(r.data.nama)}</b> (${esc(r.data.kelas)})<br><span class="badge text-bg-${badge(r.data.status)}">${esc(r.data.status)}</span>`); toast(r.message, 'success'); }
-    else { hasil(`<h4 class="text-danger">❌ Gagal</h4>${esc(r.message)}`); toast(r.message, 'danger'); }
+    else { sudahScan.delete(kunci); hasil(`<h4 class="text-danger">❌ Gagal</h4>${esc(r.message)}`); toast(r.message, 'danger'); }
     setTimeout(resetHasil, 2500);
-  }, false);
+  }, false, () => { sudahScan.delete(kunci); hasil('<h4 class="text-danger">❌ Gagal terhubung</h4>Silakan scan ulang.'); setTimeout(resetHasil, 2500); });
 }
 $('qrFile').onchange = e => {
   const f = e.target.files[0]; if (!f) return; hasil('Membaca gambar...');
@@ -434,7 +485,7 @@ $('btnManual').onclick = () => {
   }
   api('simpanAbsensi', [nis, $('mStatus').value, ket, jenis], r => {
     toast(r.message, r.success ? 'success' : 'danger'); if (r.success) { $('mNis').value = ''; $('mKet').value = ''; }
-  });
+  }, false);
 };
 
 // ===== REKAP PRESENSI (bulanan) =====
@@ -450,7 +501,7 @@ const urutKelas = (a, b) => String(a).localeCompare(String(b), 'id', { numeric: 
 
 function loadRekap() {
   const v = $('rBulan').value || today().slice(0, 7), [thn, bln] = v.split('-');
-  api('getRekapBulan', [{ bln, thn }], r => {
+  swr('getRekapBulan', [{ bln, thn }], 'rk_' + v, r => {
     if (!r.success) return toast(r.message, 'danger');
     rk.bln = bln; rk.thn = thn; rk.rows = r.data.rows; rk.batas = r.data.batas;
     hitungRekap(); renderRekap();
@@ -615,7 +666,7 @@ function crud(id) {
 }
 function loadMod(id) {
   const m = MOD[id];
-  api('getList', [{ sheet: m.s }], r => {
+  swr('getList', [{ sheet: m.s }], 'list_' + m.s, r => {
     if (!r.success) return toast(r.message, 'danger');
     $('tb-' + id).innerHTML = r.data.length ? r.data.slice().reverse().map(x => `<tr>${m.c.map(c => `<td>${esc(x[c[1]])}</td>`).join('')}<td class="text-nowrap"><button class="btn btn-sm btn-danger" data-del="${id}" data-id="${esc(x[0])}"><i class="bi bi-trash"></i></button></td></tr>`).join('') : empty(m.c.length + 1);
   });
@@ -638,7 +689,7 @@ function rekapCatat(id, sheet, title) {
 }
 function loadRekapCatat(id, sheet) {
   kelasOpts($('fk-' + id));
-  api('getList', [{ sheet }], r => {
+  swr('getList', [{ sheet }], 'list_' + sheet, r => {
     if (!r.success) return toast(r.message, 'danger');
     const k = $('fk-' + id).value, g = {};
     r.data.forEach(x => { if (k !== 'Semua' && String(x[4]) !== k) return; const m = g[x[2]] = g[x[2]] || { nama: x[3], kelas: x[4], n: 0, p: 0 }; m.n++; m.p += Number(x[6]) || 0; });
@@ -654,7 +705,7 @@ function mkPeringkat() {
 }
 function loadPeringkat() {
   kelasOpts($('fk-peringkat'));
-  api('getPeringkat', [{}], r => {
+  swr('getPeringkat', [{}], 'ring', r => {
     if (!r.success) return toast(r.message, 'danger');
     const k = $('fk-peringkat').value, a = r.data.filter(x => k === 'Semua' || String(x.kelas) === k);
     $('tb-peringkat').innerHTML = a.length ? a.map((x, i) => `<tr><td>${['🥇','🥈','🥉'][i] || i + 1}</td><td><b>${esc(x.nama)}</b></td><td>${esc(x.kelas)}</td><td class="text-success">${x.prestasi}</td><td class="text-danger">${x.pelanggaran}</td><td><b>${x.skor}</b></td></tr>`).join('') : empty(6);
@@ -731,14 +782,24 @@ function loadPeng() {
 }
 // -- Login & sesi
 function showLogin() { $('loginBox').style.display = 'flex'; }
-function logout() { TOKEN = ''; USER = null; sessionStorage.clear(); stopScan(); showLogin(); }
+function logout() { TOKEN = ''; USER = null; sessionStorage.clear(); idbClear(); Object.keys(fotoCache).forEach(k => delete fotoCache[k]); stopScan(); showLogin(); }
 function buildNav() {
   $('nav').innerHTML = NAV.filter(n => !n[3] || USER.role === 'admin').map(n => `<li><a class="nav-link" data-section="${n[0]}"><i class="bi bi-${n[2]}"></i> ${n[1]}</a></li>`).join('');
   document.querySelectorAll('[data-section]').forEach(l => l.onclick = () => navigateTo(l.dataset.section));
 }
+// Mulai aplikasi: 1 panggilan (siswa+guru+dashboard) alih-alih 3; tampil instan dari cache bila ada
+function boot() {
+  const t = today(), run = () => { loadGuru(); loadSiswa(); navigateTo('dashboard'); };
+  if (SC.get('siswa')) { noNet = true; run(); noNet = false; }
+  api('getBoot', [{ iso: t }], r => {
+    if (r.success) { SC.set('siswa', r.data.siswa); SC.set('guru', r.data.guru); if (r.data.dash) SC.set('dash_' + t, r.data.dash); }
+    noNet = r.success; run(); noNet = false;
+    setTimeout(() => { const m = t.slice(0, 7); if (!SC.get('rk_' + m)) api('getRekapBulan', [{ bln: t.slice(5, 7), thn: t.slice(0, 4) }], x => { if (x.success) SC.set('rk_' + m, x.data); }, false); }, 2500);
+  }, false);
+}
 function start() {
   $('loginBox').style.display = 'none'; $('userInfo').innerHTML = `<div class="d-flex align-items-center gap-2"><span class="avatar">${esc(String(USER.nama).charAt(0).toUpperCase())}</span><div><b>${esc(USER.nama)}</b><br><small class="text-muted">${esc(USER.role)}</small></div></div>`;
-  buildNav(); loadGuru(); loadSiswa(); navigateTo('dashboard');
+  buildNav(); boot();
 }
 
 // ===== TAMPILAN =====
@@ -779,5 +840,5 @@ document.addEventListener('DOMContentLoaded', () => {
   $('btnTheme').onclick = () => $('themeSwitch').click();
   $('sSearch').oninput = renderSiswa; $('sKelas').onchange = renderSiswa; $('sStatus').onchange = renderSiswa;
   $('gSearch').oninput = () => { if (!$('section-siswa').classList.contains('active')) navigateTo('siswa'); $('sSearch').value = $('gSearch').value; renderSiswa(); };
-  TOKEN && USER ? start() : showLogin();
+  TOKEN && USER ? start() : (idbClear(), showLogin());
 });

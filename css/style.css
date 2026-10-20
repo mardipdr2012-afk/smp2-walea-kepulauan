@@ -242,3 +242,9 @@ body { background: var(--bg); color: var(--text); }
 .modal-content > form > .modal-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
 .modal-content > form > .modal-footer { flex: 0 0 auto; }
 .modal-dialog-scrollable .modal-content { max-height: 100%; }
+
+/* Bilah progres tipis (pemuatan data tanpa menutup layar) */
+#topbar { position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 2000; pointer-events: none; opacity: 0; transition: opacity .2s;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent) no-repeat; background-size: 40% 100%; animation: tbar 1s linear infinite; }
+#topbar.on { opacity: 1; }
+@keyframes tbar { from { background-position: -40% 0; } to { background-position: 140% 0; } }
