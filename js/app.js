@@ -871,7 +871,7 @@ function mkPengaturan() {
         <div class="col-12 col-md-6"><label class="form-label" for="p_tahunAjaran">Tahun ajaran aktif</label><input id="p_tahunAjaran" name="tahunAjaran" class="form-control" placeholder="2026/2027" pattern="\\d{4}/\\d{4}"></div>
         <div class="col-12 col-md-6"><label class="form-label" for="p_fonnteToken">Token API WhatsApp Fonnte (Opsional untuk server otomatis)</label>
           <div class="input-group"><input id="p_fonnteToken" name="fonnteToken" type="password" class="form-control" autocomplete="new-password"><button type="button" class="btn btn-soft btn-eye" id="btnEyeTok" aria-label="Tampilkan token"><i class="bi bi-eye"></i></button></div></div>
-        <div class="col-12 col-md-6"><label class="form-label" for="p_waOtomatis">Kirim WhatsApp Otomatis ke Orang Tua &amp; Guru Wali Setelah Absen (Ya / Tidak)</label><select id="p_waOtomatis" name="waOtomatis" class="form-select"><option>Ya</option><option>Tidak</option></select></div>
+        <div class="col-12 col-md-6"><label class="form-label" for="p_waOtomatis">Kirim WhatsApp Otomatis ke Orang Tua, Guru Wali &amp; Guru Kelas Setelah Absen / Pelanggaran (Ya / Tidak)</label><select id="p_waOtomatis" name="waOtomatis" class="form-select"><option>Ya</option><option>Tidak</option></select></div>
       </div><button class="btn btn-sky mt-3"><i class="bi bi-check2"></i> Simpan Pengaturan</button></form>
     </div>
     <div class="sis-card">
@@ -965,7 +965,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   $('genForm').onsubmit = e => {
     e.preventDefault(); const id = e.target.dataset.mod;
-    api('tambahData', [{ sheet: MOD[id].s, f: Object.fromEntries(new FormData(e.target)) }], r => { toast(r.message, r.success ? 'success' : 'danger'); if (r.success) { bootstrap.Modal.getInstance($('mdlForm')).hide(); loadMod(id); } });
+    api('tambahData', [{ sheet: MOD[id].s, f: Object.fromEntries(new FormData(e.target)) }], r => { toast(r.message, r.success ? 'success' : 'danger'); if (r.success) { bootstrap.Modal.getInstance($('mdlForm')).hide(); loadMod(id); if (r.data && r.data.wa) api('kirimNotifPelanggaran', [{ id: r.data.id }], () => {}, false, () => {}); } });
   };
   $('loginForm').onsubmit = e => {
     e.preventDefault();
