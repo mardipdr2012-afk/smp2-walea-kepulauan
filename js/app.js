@@ -504,12 +504,12 @@ $('qrFile').onchange = e => {
 };
 $('jenis').onchange = () => $('mapel').classList.toggle('d-none', $('jenis').value !== 'Mata Pelajaran');
 // -- WhatsApp otomatis & absen susulan
-function kirimWA(nis, jenis) { api('kirimNotifAbsen', [{ nis, jenis }], () => {}, false, () => {}); }
+function kirimWA(nis, jenis) { api('kirimNotifAbsen', [{ nis, jenis }], r => { if (!r.success) toast(r.message, 'danger'); }, false, () => {}); }
 function kirimBertahap(list, jenis, iso, i = 0) {
   if (i >= list.length) return toast('Notifikasi WhatsApp selesai dikirim.', 'success');
   toast('Mengirim WhatsApp ' + Math.min(i + 8, list.length) + ' / ' + list.length + '...', 'primary');
   const lanjut = () => kirimBertahap(list, jenis, iso, i + 8);
-  api('kirimNotifAbsen', [{ list: list.slice(i, i + 8), jenis, tanggal: iso }], lanjut, false, lanjut);
+  api('kirimNotifAbsen', [{ list: list.slice(i, i + 8), jenis, tanggal: iso }], x => { if (!x.success) toast(x.message, 'danger'); lanjut(); }, false, lanjut);
 }
 function muatSusulan() {
   const iso = $('sTgl').value || today(), [thn, bln] = iso.split('-'), jenis = $('sJenis').value;
@@ -872,6 +872,7 @@ function mkPengaturan() {
         <div class="col-12 col-md-6"><label class="form-label" for="p_fonnteToken">Token API WhatsApp Fonnte (Opsional untuk server otomatis)</label>
           <div class="input-group"><input id="p_fonnteToken" name="fonnteToken" type="password" class="form-control" autocomplete="new-password"><button type="button" class="btn btn-soft btn-eye" id="btnEyeTok" aria-label="Tampilkan token"><i class="bi bi-eye"></i></button></div></div>
         <div class="col-12 col-md-6"><label class="form-label" for="p_waOtomatis">Kirim WhatsApp Otomatis ke Orang Tua, Guru Wali &amp; Guru Kelas Setelah Absen / Pelanggaran (Ya / Tidak)</label><select id="p_waOtomatis" name="waOtomatis" class="form-select"><option>Ya</option><option>Tidak</option></select></div>
+        <div class="col-12 col-md-6"><label class="form-label" for="p_tesHp">Uji kirim WhatsApp ke nomor</label><div class="input-group"><input id="p_tesHp" class="form-control" placeholder="08xxxxxxxxxx" inputmode="tel"><button type="button" class="btn btn-soft" id="btnTesWA"><i class="bi bi-send"></i> Kirim Uji</button></div><small class="text-muted d-block mt-1">Memakai token yang diisi di kolom token (tidak perlu disimpan dulu).</small></div>
       </div><button class="btn btn-sky mt-3"><i class="bi bi-check2"></i> Simpan Pengaturan</button></form>
     </div>
     <div class="sis-card">
@@ -892,6 +893,7 @@ function mkPengaturan() {
     </div>`);
   $('section-pengaturan').classList.add('sis-scope');
   $('pengForm').onsubmit = e => { e.preventDefault(); api('simpanPengaturan', [Object.fromEntries(new FormData(e.target))], r => toast(r.message, r.success ? 'success' : 'danger')); };
+  $('btnTesWA').onclick = () => api('tesWA', [{ hp: $('p_tesHp').value, token: $('p_fonnteToken').value }], r => toast(r.message, r.success ? 'success' : 'danger'));
   $('btnEyeTok').onclick = () => { const i = $('p_fonnteToken'), on = i.type === 'password'; i.type = on ? 'text' : 'password'; $('btnEyeTok').innerHTML = `<i class="bi bi-eye${on ? '-slash' : ''}"></i>`; };
   $('btnSimpanHari').onclick = () => {
     const hari = [...document.querySelectorAll('#hariWrap input:checked')].map(i => +i.value);
@@ -965,7 +967,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   $('genForm').onsubmit = e => {
     e.preventDefault(); const id = e.target.dataset.mod;
-    api('tambahData', [{ sheet: MOD[id].s, f: Object.fromEntries(new FormData(e.target)) }], r => { toast(r.message, r.success ? 'success' : 'danger'); if (r.success) { bootstrap.Modal.getInstance($('mdlForm')).hide(); loadMod(id); if (r.data && r.data.wa) api('kirimNotifPelanggaran', [{ id: r.data.id }], () => {}, false, () => {}); } });
+    api('tambahData', [{ sheet: MOD[id].s, f: Object.fromEntries(new FormData(e.target)) }], r => { toast(r.message, r.success ? 'success' : 'danger'); if (r.success) { bootstrap.Modal.getInstance($('mdlForm')).hide(); loadMod(id); if (r.data && r.data.wa) api('kirimNotifPelanggaran', [{ id: r.data.id }], x => { if (!x.success) toast(x.message, 'danger'); }, false, () => {}); } });
   };
   $('loginForm').onsubmit = e => {
     e.preventDefault();
