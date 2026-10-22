@@ -276,3 +276,23 @@ body { background: var(--bg); color: var(--text); }
 [data-theme="dark"] .brand-kicker { color: #fbbf24; }
 [data-theme="dark"] .sidebar-header .brand-text b { color: #fff; }
 [data-theme="dark"] .sidebar-header .brand-text small { color: #cbd5e1; }
+
+/* Kartu pelajar ukuran ID card CR80: 54 x 85,6 mm (potret) */
+.idc { width: 54mm; height: 85.6mm; max-width: none; margin: 0 auto; display: flex; flex-direction: column; border-width: .3mm; border-radius: 3mm; font-size: 5.6pt; }
+.idc-head { padding: 2mm 2.4mm; gap: 1.8mm; } .idc-head img { width: 9mm; height: 9mm; }
+.idc-pem { font-size: 3.6pt; line-height: 1.3; letter-spacing: .03em; } .idc-sch { font-size: 6.6pt; line-height: 1.15; } .idc-adr { font-size: 3.4pt; margin-top: .4mm; }
+.idc-line { height: 1mm; }
+.idc-body { padding: 2.2mm 2.4mm 0; flex: 1; }
+.idc-top { gap: 2.4mm; margin-bottom: 2mm; align-items: center; }
+.idc-foto { width: 21mm; border-radius: 1.6mm; border-width: .3mm; } .idc-foto i { font-size: 9mm; } .idc-foto b { font-size: 4.6pt; } .idc-foto small { font-size: 4pt; }
+.idc-qr { padding: 1mm; border-radius: 1.6mm; border-width: .2mm; } .idc-qr img, .idc-qr canvas { width: 19mm !important; height: 19mm !important; }
+.idc-qrl { font-size: 4pt; margin-top: 1mm; }
+.idc-info { font-size: 5.4pt; border-radius: 1.6mm; border-width: .2mm; } .idc-info td { padding: .6mm 1mm; line-height: 1.2; } .idc-info td:first-child { width: 30%; } .idc-info td:nth-child(2) { width: 1.4mm; padding: .6mm 0; }
+.idc-foot { margin: 0 2.4mm; padding: 1mm 0 1.6mm; font-size: 3.6pt; line-height: 1.3; border-top-width: .2mm; }
+#kartuWrap { zoom: 2; display: flex; justify-content: center; }
+@media print {
+  #kartuWrap { zoom: 1; display: block; }
+  body.print-card #kartu { position: absolute; left: 10mm; top: 10mm; width: 54mm; height: 85.6mm; }
+  body.print-kelas #printArea { display: grid !important; grid-template-columns: repeat(auto-fill, 54mm); gap: 4mm; justify-content: center; }
+  body.print-kelas .idc { break-inside: avoid; margin: 0; }
+}

@@ -164,6 +164,7 @@
             <label class="form-label">Keterangan (opsional)</label><input id="mKet" class="form-control mb-3" placeholder="Misal: demam / izin keluarga">
             <button class="btn btn-warning w-100" id="btnManual">Simpan Manual</button>
           </div></div>
+          <button class="btn btn-outline-warning w-100 mt-3" id="btnSusulan"><i class="bi bi-lightning-charge-fill"></i> Input Absen Susulan (Saat Listrik Padam)</button>
         </div>
       </div>
     </section>
@@ -174,6 +175,7 @@
         <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
           <div><div class="sis-title">Rekapitulasi Presensi Siswa</div><div class="sis-sub">Laporan kehadiran, keterlambatan, dan persentase kehadiran bulanan</div></div>
           <div class="d-flex gap-2 flex-wrap">
+            <button class="btn btn-soft d-none" id="btnCetakHarian"><i class="bi bi-printer-fill"></i> Cetak Rekap Harian</button>
             <button class="btn btn-soft" id="btnCetakHasil"><i class="bi bi-printer"></i> Cetak Hasil</button>
             <button class="btn btn-sky" id="btnCetakLengkap"><i class="bi bi-printer-fill"></i> Cetak Lengkap</button>
           </div>
@@ -183,9 +185,14 @@
           <div class="col-12 col-md-3"><label class="form-label" for="fKelas">Kelas</label><select id="fKelas" class="form-select"><option value="Semua">Semua Kelas</option></select></div>
           <div class="col-12 col-md-6"><label class="form-label" for="rSearch">Cari nama / NIS</label><input id="rSearch" class="form-control" placeholder="Cari nama atau NIS siswa..." autocomplete="off"></div>
         </div>
+        <div class="d-flex gap-2 flex-wrap mt-3 align-items-center" id="rModeTabs"><button class="pill-tab active" data-m="bulan">Per Bulan</button><button class="pill-tab" data-m="hari">Per Hari</button><input type="date" id="rTanggal" class="form-control w-auto d-none"></div>
         <div class="d-flex gap-2 flex-wrap mt-3" id="rJenisTabs"><button class="pill-tab active" data-j="Sekolah">Presensi Sekolah</button><button class="pill-tab" data-j="Mata Pelajaran">Mata Pelajaran</button></div>
       </div>
-      <div class="sis-card">
+      <div class="sis-card d-none" id="rHarianCard">
+        <div class="sis-sub mb-3" id="rhInfo"></div>
+        <div class="table-responsive"><table class="table sis-table mb-0"><thead><tr><th>#</th><th>Nama Siswa</th><th>Kelas</th><th>Status</th><th>Jam Datang</th><th>Jam Pulang</th><th>Keterangan</th></tr></thead><tbody id="rhBody"></tbody></table></div>
+      </div>
+      <div class="sis-card" id="rBulanCard">
         <div class="sis-sub mb-3" id="rInfo"></div>
         <div class="table-responsive"><table class="table sis-table rk-table mb-0"><thead id="rekapHead"></thead><tbody id="rekapBody"></tbody></table></div>
       </div>
@@ -270,6 +277,24 @@
       <small class="text-muted d-block mt-2">Dipakai untuk mengirim rekap presensi dan kartu pelajar lewat WhatsApp. Kosongkan lalu simpan untuk menghapus nomor.</small>
     </div>
     <div class="modal-footer"><button type="button" class="btn btn-soft" data-bs-dismiss="modal">Batal</button><button type="button" class="btn btn-wa" id="btnWaSimpan"><i class="bi bi-check2-circle"></i> Simpan Nomor</button></div>
+  </div></div></div>
+
+  <!-- Modal Absen Susulan -->
+  <div class="modal fade" id="mdlSusulan" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-xl modal-fullscreen-md-down"><div class="modal-content sis-scope">
+    <div class="modal-header"><h5 class="modal-title fw-bold"><i class="bi bi-lightning-charge-fill text-warning"></i> Input Absen Susulan</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button></div>
+    <div class="modal-body">
+      <div class="text-muted small mb-3">Untuk memasukkan absen yang dicatat di kertas saat listrik atau internet padam. Pilih tanggal dan kelas, lalu tandai status tiap siswa.</div>
+      <div class="row g-2 mb-3">
+        <div class="col-6 col-md-3"><label class="form-label" for="sTgl">Tanggal</label><input type="date" id="sTgl" class="form-control"></div>
+        <div class="col-6 col-md-3"><label class="form-label" for="sJenis">Jenis Absen</label><select id="sJenis" class="form-select"><option>Masuk</option><option>Pulang</option></select></div>
+        <div class="col-6 col-md-3"><label class="form-label" for="sKls">Kelas</label><select id="sKls" class="form-select"></select></div>
+        <div class="col-6 col-md-3"><label class="form-label" for="sJam">Jam Standar (WITA)</label><input type="time" id="sJam" class="form-control" value="07:00"></div>
+      </div>
+      <div class="d-flex flex-wrap gap-2 align-items-center mb-2"><button type="button" class="btn btn-soft btn-sm" id="sSemuaHadir">Tandai semua Hadir</button>
+        <div class="form-check ms-auto mb-0"><input class="form-check-input" type="checkbox" id="sWA"><label class="form-check-label small" for="sWA">Kirim WhatsApp ke orang tua &amp; guru wali</label></div></div>
+      <div class="table-responsive"><table class="table sis-table mb-0"><thead><tr><th>#</th><th>Nama Siswa</th><th>Status</th><th>Jam (opsional)</th></tr></thead><tbody id="sBody"></tbody></table></div>
+    </div>
+    <div class="modal-footer"><span class="me-auto small text-muted" id="sInfo"></span><button type="button" class="btn btn-soft" data-bs-dismiss="modal">Batal</button><button type="button" class="btn btn-warning" id="sSimpan"><i class="bi bi-check2-circle"></i> Simpan Absen</button></div>
   </div></div></div>
 
   <!-- Modal Kartu Pelajar -->

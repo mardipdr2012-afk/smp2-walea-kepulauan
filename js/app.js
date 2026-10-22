@@ -301,11 +301,13 @@ function bukaKartu(s) {
   }, false);
 }
 $('btnPng').onclick = () => {
-  const el = $('kartu'); if (!el) return;
+  if (!kartuSiswa) return;
   if (!window.html2canvas) return toast('Fitur unduh belum siap. Muat ulang halaman.', 'danger');
-  spin(1);
-  html2canvas(el, { scale: 3, useCORS: true, backgroundColor: null }).then(c => { const a = document.createElement('a'); a.download = 'Kartu-' + kartuSiswa.nis + '.png'; a.href = c.toDataURL('image/png'); a.click(); })
-    .catch(() => toast('Gagal membuat gambar kartu.', 'danger')).finally(() => spin(0));
+  spin(1);   // salinan ukuran asli (54 x 85,6 mm) agar PNG tajam & tidak terpengaruh zoom pratinjau
+  const box = document.createElement('div'); box.style.cssText = 'position:fixed;left:-9999px;top:0';
+  box.innerHTML = kartuHTML(kartuSiswa, fotoCache[kartuSiswa.nis] || ''); document.body.appendChild(box); isiQR(box);
+  setTimeout(() => html2canvas(box.firstElementChild, { scale: 4, useCORS: true, backgroundColor: null }).then(c => { const a = document.createElement('a'); a.download = 'Kartu-' + kartuSiswa.nis + '.png'; a.href = c.toDataURL('image/png'); a.click(); })
+    .catch(() => toast('Gagal membuat gambar kartu.', 'danger')).finally(() => { box.remove(); spin(0); }), 150);
 };
 $('btnWa').onclick = () => {
   const s = kartuSiswa; if (!s) return;
@@ -489,7 +491,7 @@ function onScan(text) {
   hasil(`<h4 class="text-primary">⏳ Menyimpan...</h4><b>${esc(s ? s.nama : nis)}</b>${s ? ' (' + esc(s.kelas) + ')' : ''}`);
   setTimeout(() => { scanBusy = false; }, 1200);   // siap memindai siswa berikutnya tanpa menunggu server
   api('simpanAbsensi', [text, 'Hadir', ket, jenis], r => {
-    if (r.success) { hasil(`<h4 class="text-success">✅ Berhasil</h4><b>${esc(r.data.nama)}</b> (${esc(r.data.kelas)})<br><span class="badge text-bg-${badge(r.data.status)}">${esc(r.data.status)}</span>`); toast(r.message, 'success'); }
+    if (r.success) { hasil(`<h4 class="text-success">✅ Berhasil</h4><b>${esc(r.data.nama)}</b> (${esc(r.data.kelas)})<br><span class="badge text-bg-${badge(r.data.status)}">${esc(r.data.status)}</span>`); toast(r.message, 'success'); if (r.data.wa) kirimWA(nis, jenis); }
     else { sudahScan.delete(kunci); hasil(`<h4 class="text-danger">❌ Gagal</h4>${esc(r.message)}`); toast(r.message, 'danger'); }
     setTimeout(resetHasil, 2500);
   }, false, () => { sudahScan.delete(kunci); hasil('<h4 class="text-danger">❌ Gagal terhubung</h4>Silakan scan ulang.'); setTimeout(resetHasil, 2500); });
@@ -501,6 +503,50 @@ $('qrFile').onchange = e => {
     .finally(() => { $('qrFile').value = ''; });
 };
 $('jenis').onchange = () => $('mapel').classList.toggle('d-none', $('jenis').value !== 'Mata Pelajaran');
+// -- WhatsApp otomatis & absen susulan
+function kirimWA(nis, jenis) { api('kirimNotifAbsen', [{ nis, jenis }], () => {}, false, () => {}); }
+function kirimBertahap(list, jenis, iso, i = 0) {
+  if (i >= list.length) return toast('Notifikasi WhatsApp selesai dikirim.', 'success');
+  toast('Mengirim WhatsApp ' + Math.min(i + 8, list.length) + ' / ' + list.length + '...', 'primary');
+  const lanjut = () => kirimBertahap(list, jenis, iso, i + 8);
+  api('kirimNotifAbsen', [{ list: list.slice(i, i + 8), jenis, tanggal: iso }], lanjut, false, lanjut);
+}
+function muatSusulan() {
+  const iso = $('sTgl').value || today(), [thn, bln] = iso.split('-'), jenis = $('sJenis').value;
+  swr('getRekapBulan', [{ bln, thn }], 'rk_' + thn + '-' + bln, r => {
+    if (!r.success) return toast(r.message, 'danger');
+    const d = iso.slice(8), ada = {}, opts = jenis === 'Pulang' ? ['Hadir'] : ['Hadir', 'Terlambat', 'Sakit', 'Izin', 'Alpa'];
+    r.data.rows.forEach(x => { if (x[0] === d && x[7] === jenis) ada[x[2]] = x[5] + ' ' + String(x[1]).slice(0, 5); });
+    const list = siswa.filter(s => isAktif(s) && s.kelas === $('sKls').value).sort((a, b) => String(a.nama).localeCompare(String(b.nama), 'id'));
+    $('sBody').innerHTML = list.map((s, i) => ada[s.nis]
+      ? `<tr class="table-secondary"><td>${i + 1}</td><td>${esc(s.nama)}</td><td colspan="2"><span class="badge text-bg-secondary">Sudah tercatat: ${esc(ada[s.nis])}</span></td></tr>`
+      : `<tr data-nis="${esc(s.nis)}"><td>${i + 1}</td><td>${esc(s.nama)}</td><td><select class="form-select form-select-sm s-st"><option value="">&mdash; lewati &mdash;</option>${opts.map(o => `<option>${o}</option>`).join('')}</select></td><td><input type="time" class="form-control form-control-sm s-jam" style="width:112px"></td></tr>`).join('') || empty(4);
+    hitungSusulan();
+  });
+}
+function hitungSusulan() { $('sInfo').textContent = [...$('sBody').querySelectorAll('.s-st')].filter(x => x.value).length + ' siswa akan disimpan'; }
+$('btnSusulan').onclick = () => {
+  const ks = [...new Set(siswa.filter(isAktif).map(s => s.kelas))].sort(urutKelas);
+  if (!ks.length) return toast('Data siswa belum dimuat.', 'warning');
+  $('sKls').innerHTML = ks.map(k => `<option>${esc(k)}</option>`).join(''); $('sTgl').max = today(); if (!$('sTgl').value) $('sTgl').value = today();
+  bootstrap.Modal.getOrCreateInstance($('mdlSusulan')).show(); muatSusulan();
+};
+$('sTgl').onchange = $('sKls').onchange = muatSusulan;
+$('sJenis').onchange = () => { $('sJam').value = $('sJenis').value === 'Pulang' ? '13:00' : '07:00'; muatSusulan(); };
+$('sBody').onchange = hitungSusulan;
+$('sSemuaHadir').onclick = () => { $('sBody').querySelectorAll('.s-st').forEach(x => { x.value = 'Hadir'; }); hitungSusulan(); };
+$('sSimpan').onclick = () => {
+  const items = [...$('sBody').querySelectorAll('tr[data-nis]')].map(tr => ({ nis: tr.dataset.nis, status: tr.querySelector('.s-st').value, jam: tr.querySelector('.s-jam').value })).filter(x => x.status);
+  if (!items.length) return toast('Belum ada siswa yang ditandai.', 'warning');
+  if (!$('sJam').value) return toast('Isi jam standar terlebih dahulu.', 'warning');
+  const jenis = $('sJenis').value, iso = $('sTgl').value, wa = $('sWA').checked;
+  api('simpanAbsensiSusulan', [{ tanggal: iso, jenis, jam: $('sJam').value, items }], r => {
+    toast(r.message, r.success ? 'success' : 'danger'); if (!r.success) return;
+    bootstrap.Modal.getInstance($('mdlSusulan')).hide();
+    if (wa && r.data.wa && r.data.nis.length) kirimBertahap(r.data.nis, jenis, iso);
+    else if (wa && !r.data.wa) toast('WhatsApp belum aktif. Isi token dan pilih "Ya" di Pengaturan.', 'warning');
+  });
+};
 $('btnManual').onclick = () => {
   const nis = $('mNis').value, jenis = $('jenis').value; let ket = $('mKet').value.trim();
   if (!nis) return toast('Pilih siswa terlebih dahulu!', 'warning');
@@ -509,7 +555,7 @@ $('btnManual').onclick = () => {
     ket = ket ? m + ' - ' + ket : m;
   }
   api('simpanAbsensi', [nis, $('mStatus').value, ket, jenis], r => {
-    toast(r.message, r.success ? 'success' : 'danger'); if (r.success) { $('mNis').value = ''; $('mKet').value = ''; }
+    toast(r.message, r.success ? 'success' : 'danger'); if (r.success) { $('mNis').value = ''; $('mKet').value = ''; if (r.data && r.data.wa) kirimWA(nis, jenis); }
   }, false);
 };
 
@@ -598,6 +644,41 @@ function bukaDetail(a) {
   bootstrap.Modal.getOrCreateInstance($('mdlDetail')).show();
 }
 // -- Dokumen cetak (kop, tabel, tanda tangan)
+// -- Rekap per hari (dihitung dari data bulan yang sama, jadi memakai cache)
+let rMode = 'bulan', rh = { iso: '', rows: [] };
+function loadHarian() {
+  const iso = $('rTanggal').value || today(), [thn, bln] = iso.split('-'); $('rTanggal').value = iso;
+  swr('getRekapBulan', [{ bln, thn }], 'rk_' + thn + '-' + bln, r => {
+    if (!r.success) return toast(r.message, 'danger');
+    rh.iso = iso; rh.rows = r.data.rows; renderHarian();
+  });
+}
+function dataHarian() {
+  const d = rh.iso.slice(8), k = $('fKelas').value, q = ($('rSearch').value || '').trim().toLowerCase(), m = {};
+  rh.rows.forEach(x => {
+    if (x[0] !== d) return; const n = m[x[2]] = m[x[2]] || {};
+    if (x[7] === 'Masuk') { n.status = x[5]; n.masuk = String(x[1]).slice(0, 5); n.ket = x[6]; } else if (x[7] === 'Pulang') n.pulang = String(x[1]).slice(0, 5);
+  });
+  return siswa.filter(s => isAktif(s) && (k === 'Semua' || s.kelas === k) && (!q || (s.nama + ' ' + s.nis).toLowerCase().includes(q)))
+    .sort((a, b) => urutKelas(a.kelas, b.kelas) || String(a.nama).localeCompare(String(b.nama), 'id'))
+    .map(s => Object.assign({ nis: s.nis, nama: s.nama, kelas: s.kelas, status: 'Belum Absen', masuk: '', pulang: '', ket: '' }, m[s.nis] || {}));
+}
+const hitungHarian = a => { const c = {}; ['Hadir', 'Terlambat', 'Sakit', 'Izin', 'Alpa', 'Belum Absen'].forEach(s => { c[s] = a.filter(x => x.status === s).length; }); return c; };
+const tglPanjang = iso => new Date(iso + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+function renderHarian() {
+  if (!rh.iso) return; const a = dataHarian(), c = hitungHarian(a);
+  $('rhInfo').innerHTML = `<b>${esc(tglPanjang(rh.iso))}</b> &mdash; ${a.length} siswa &bull; Hadir <b>${c.Hadir}</b> &bull; Terlambat <b>${c.Terlambat}</b> &bull; Sakit <b>${c.Sakit}</b> &bull; Izin <b>${c.Izin}</b> &bull; Alpa <b>${c.Alpa}</b> &bull; Belum absen <b>${c['Belum Absen']}</b>`;
+  $('rhBody').innerHTML = a.length ? a.map((x, i) => `<tr><td>${i + 1}</td><td><b>${esc(x.nama)}</b></td><td>${esc(x.kelas)}</td><td><span class="badge text-bg-${x.status === 'Belum Absen' ? 'secondary' : x.status === 'Sakit' || x.status === 'Izin' ? 'info' : badge(x.status)}">${esc(x.status)}</span></td><td>${esc(x.masuk || '-')}</td><td>${esc(x.pulang || '-')}</td><td>${esc(x.ket || '-')}</td></tr>`).join('') : empty(7);
+}
+function cetakHarian() {
+  const a = dataHarian(); if (!a.length) return toast('Tidak ada data untuk dicetak.', 'warning');
+  const c = hitungHarian(a), kls = [...new Set(a.map(x => String(x.kelas)))].sort(urutKelas), kf = $('fKelas').value === 'Semua' ? 'Semua Kelas' : $('fKelas').value;
+  const tbl = '<table class="lap-tbl"><thead><tr><th>No</th><th>Nama Siswa</th><th>NIS</th><th>Kelas</th><th>Status</th><th>Jam Datang<br>(WITA)</th><th>Jam Pulang<br>(WITA)</th><th>Keterangan</th></tr></thead><tbody>'
+    + a.map((x, i) => `<tr><td class="c">${i + 1}</td><td>${esc(x.nama)}</td><td class="c">${esc(x.nis)}</td><td class="c">${esc(x.kelas)}</td><td class="c">${esc(x.status)}</td><td class="c">${esc(x.masuk || '-')}</td><td class="c">${esc(x.pulang || '-')}</td><td>${esc(x.ket || '-')}</td></tr>`).join('') + '</tbody></table>';
+  $('laporan').innerHTML = kopHTML() + `<div class="lap-judul">LAPORAN PRESENSI HARIAN SISWA</div><div class="lap-meta">Hari, Tanggal: <b>${esc(tglPanjang(rh.iso))}</b> | Kelas: <b>${esc(kf)}</b> | Hadir: <b>${c.Hadir}</b> | Terlambat: <b>${c.Terlambat}</b> | Sakit: <b>${c.Sakit}</b> | Izin: <b>${c.Izin}</b> | Alpa: <b>${c.Alpa}</b> | Belum Absen: <b>${c['Belum Absen']}</b></div>` + tbl + ttdHTML(kls);
+  $('pvTitle').textContent = 'Pratinjau Rekap Presensi Harian'; $('pvSub').textContent = 'Klik Cetak Sekarang lalu pilih "Save as PDF".';
+  bootstrap.Modal.getOrCreateInstance($('mdlPreview')).show();
+}
 function kopHTML() {
   return `<div class="lap-kop"><img src="${esc(SEKOLAH.logo)}" alt=""><div class="lap-kop-t"><div>${esc(SEKOLAH.pemda)}</div><div>${esc(SEKOLAH.dinas)}</div><div class="lap-sch">${esc(SEKOLAH.nama)}</div>${SEKOLAH.alamat ? `<div class="lap-adr">${esc(SEKOLAH.alamat)}</div>` : ''}</div></div><div class="lap-rule"></div>`;
 }
@@ -648,7 +729,15 @@ function bukaPreview(mode) {
 }
 function initRekap() {
   $('rBulan').value = today().slice(0, 7);
-  $('rBulan').onchange = loadRekap; $('fKelas').onchange = renderRekap; $('rSearch').oninput = renderRekap;
+  $('rBulan').onchange = loadRekap; $('fKelas').onchange = () => rMode === 'hari' ? renderHarian() : renderRekap(); $('rSearch').oninput = () => rMode === 'hari' ? renderHarian() : renderRekap();
+  $('rTanggal').onchange = loadHarian; $('btnCetakHarian').onclick = cetakHarian;
+  $('rModeTabs').onclick = e => {
+    const b = e.target.closest('[data-m]'); if (!b) return; rMode = b.dataset.m; const hr = rMode === 'hari';
+    document.querySelectorAll('#rModeTabs [data-m]').forEach(x => x.classList.toggle('active', x === b));
+    ['rTanggal', 'rBulanCard', 'rJenisTabs', 'btnCetakHasil', 'btnCetakLengkap', 'rHarianCard', 'btnCetakHarian'].forEach(i => $(i).classList.toggle('d-none', ['rTanggal', 'rHarianCard', 'btnCetakHarian'].includes(i) ? !hr : hr));
+    $('rBulan').closest('[class*="col-"]').classList.toggle('d-none', hr);
+    if (hr) { if (!$('rTanggal').value) $('rTanggal').value = today(); loadHarian(); }
+  };
   $('rJenisTabs').onclick = e => { const b = e.target.closest('button'); if (!b) return; rk.jenis = b.dataset.j; document.querySelectorAll('#rJenisTabs .pill-tab').forEach(x => x.classList.toggle('active', x === b)); renderRekap(); };
   $('btnCetakHasil').onclick = () => bukaPreview('hasil'); $('btnCetakLengkap').onclick = () => bukaPreview('lengkap');
   $('btnPvCetak').onclick = () => { $('printArea').innerHTML = $('laporan').innerHTML; cetak('laporan'); };
@@ -782,7 +871,7 @@ function mkPengaturan() {
         <div class="col-12 col-md-6"><label class="form-label" for="p_tahunAjaran">Tahun ajaran aktif</label><input id="p_tahunAjaran" name="tahunAjaran" class="form-control" placeholder="2026/2027" pattern="\\d{4}/\\d{4}"></div>
         <div class="col-12 col-md-6"><label class="form-label" for="p_fonnteToken">Token API WhatsApp Fonnte (Opsional untuk server otomatis)</label>
           <div class="input-group"><input id="p_fonnteToken" name="fonnteToken" type="password" class="form-control" autocomplete="new-password"><button type="button" class="btn btn-soft btn-eye" id="btnEyeTok" aria-label="Tampilkan token"><i class="bi bi-eye"></i></button></div></div>
-        <div class="col-12 col-md-6"><label class="form-label" for="p_waOtomatis">Buka WhatsApp Otomatis Setelah Scan (Ya / Tidak)</label><select id="p_waOtomatis" name="waOtomatis" class="form-select"><option>Ya</option><option>Tidak</option></select></div>
+        <div class="col-12 col-md-6"><label class="form-label" for="p_waOtomatis">Kirim WhatsApp Otomatis ke Orang Tua &amp; Guru Wali Setelah Absen (Ya / Tidak)</label><select id="p_waOtomatis" name="waOtomatis" class="form-select"><option>Ya</option><option>Tidak</option></select></div>
       </div><button class="btn btn-sky mt-3"><i class="bi bi-check2"></i> Simpan Pengaturan</button></form>
     </div>
     <div class="sis-card">
