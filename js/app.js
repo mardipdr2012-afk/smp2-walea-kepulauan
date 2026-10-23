@@ -491,7 +491,7 @@ function onScan(text) {
   hasil(`<h4 class="text-primary">⏳ Menyimpan...</h4><b>${esc(s ? s.nama : nis)}</b>${s ? ' (' + esc(s.kelas) + ')' : ''}`);
   setTimeout(() => { scanBusy = false; }, 1200);   // siap memindai siswa berikutnya tanpa menunggu server
   api('simpanAbsensi', [text, 'Hadir', ket, jenis], r => {
-    if (r.success) { hasil(`<h4 class="text-success">✅ Berhasil</h4><b>${esc(r.data.nama)}</b> (${esc(r.data.kelas)})<br><span class="badge text-bg-${badge(r.data.status)}">${esc(r.data.status)}</span>`); toast(r.message, 'success'); if (r.data.wa) kirimWA(nis, jenis); }
+    if (r.success) { hasil(`<h4 class="text-success">✅ Berhasil</h4><b>${esc(r.data.nama)}</b> (${esc(r.data.kelas)})<br><span class="badge text-bg-${badge(r.data.status)}">${esc(r.data.status)}</span>`); toast(r.message, 'success'); infoWA(r.data); if (r.data.wa) kirimWA(nis, jenis); }
     else { sudahScan.delete(kunci); hasil(`<h4 class="text-danger">❌ Gagal</h4>${esc(r.message)}`); toast(r.message, 'danger'); }
     setTimeout(resetHasil, 2500);
   }, false, () => { sudahScan.delete(kunci); hasil('<h4 class="text-danger">❌ Gagal terhubung</h4>Silakan scan ulang.'); setTimeout(resetHasil, 2500); });
@@ -504,6 +504,11 @@ $('qrFile').onchange = e => {
 };
 $('jenis').onchange = () => $('mapel').classList.toggle('d-none', $('jenis').value !== 'Mata Pelajaran');
 // -- WhatsApp otomatis & absen susulan
+function infoWA(d) {
+  if (!d) return;
+  if (d.waError) toast('WhatsApp tidak terkirim: ' + d.waError, 'warning');
+  else if (d.waKirim) toast('WhatsApp terkirim ke ' + d.waKirim + ' penerima.', 'success');
+}
 function kirimWA(nis, jenis) { api('kirimNotifAbsen', [{ nis, jenis }], r => { if (!r.success) toast(r.message, 'danger'); }, false, () => {}); }
 function kirimBertahap(list, jenis, iso, i = 0) {
   if (i >= list.length) return toast('Notifikasi WhatsApp selesai dikirim.', 'success');
@@ -555,7 +560,7 @@ $('btnManual').onclick = () => {
     ket = ket ? m + ' - ' + ket : m;
   }
   api('simpanAbsensi', [nis, $('mStatus').value, ket, jenis], r => {
-    toast(r.message, r.success ? 'success' : 'danger'); if (r.success) { $('mNis').value = ''; $('mKet').value = ''; if (r.data && r.data.wa) kirimWA(nis, jenis); }
+    toast(r.message, r.success ? 'success' : 'danger'); if (r.success) { $('mNis').value = ''; $('mKet').value = ''; if (r.data) { infoWA(r.data); if (r.data.wa) kirimWA(nis, jenis); } }
   }, false);
 };
 
